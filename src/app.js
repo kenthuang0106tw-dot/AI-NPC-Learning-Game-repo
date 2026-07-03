@@ -42,7 +42,8 @@ const startRoundButton = document.querySelector("#startRoundButton");
 const resetRoundButton = document.querySelector("#resetRoundButton");
 const clearLearningButton = document.querySelector("#clearLearningButton");
 const modeButtons = document.querySelectorAll("[data-mode]");
-const moveButtons = document.querySelectorAll("[data-move]");
+const joystick = document.querySelector("#joystick");
+const joystickKnob = document.querySelector("#joystickKnob");
 const modeNote = document.querySelector("#modeNote");
 const stepCount = document.querySelector("#stepCount");
 const roundLimit = document.querySelector("#roundLimit");
@@ -52,6 +53,13 @@ const baselineAverage = document.querySelector("#baselineAverage");
 const learnedAverage = document.querySelector("#learnedAverage");
 const escapeRate = document.querySelector("#escapeRate");
 const roundLog = document.querySelector("#roundLog");
+const joystickState = {
+  active: false,
+  pointerId: null,
+  intervalId: null,
+  direction: null,
+  lastDirection: null,
+};
 
 function createVisitGrid() {
   return Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(0));
@@ -260,6 +268,72 @@ function movePlayer(directionName) {
   render();
 }
 
+function getJoystickDirection(event) {
+  const rect = joystick.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const dx = event.clientX - centerX;
+  const dy = event.clientY - centerY;
+  const distance = Math.min(Math.hypot(dx, dy), rect.width * 0.34);
+  const angle = Math.atan2(dy, dx);
+  const knobX = Math.cos(angle) * distance;
+  const knobY = Math.sin(angle) * distance;
+
+  joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+
+  if (distance < rect.width * 0.12) {
+    return null;
+  }
+
+  return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+}
+
+function stopJoystick() {
+  joystickState.active = false;
+  joystickState.pointerId = null;
+  joystickState.direction = null;
+  joystickState.lastDirection = null;
+  joystickKnob.style.transform = "translate(0, 0)";
+
+  if (joystickState.intervalId) {
+    window.clearInterval(joystickState.intervalId);
+    joystickState.intervalId = null;
+  }
+}
+
+function startJoystick(event) {
+  event.preventDefault();
+  joystickState.active = true;
+  joystickState.pointerId = event.pointerId;
+  joystick.setPointerCapture(event.pointerId);
+  joystickState.direction = getJoystickDirection(event);
+  joystickState.lastDirection = joystickState.direction;
+
+  if (joystickState.direction) {
+    movePlayer(joystickState.direction);
+  }
+
+  if (!joystickState.intervalId) {
+    joystickState.intervalId = window.setInterval(() => {
+      if (joystickState.direction) {
+        movePlayer(joystickState.direction);
+      }
+    }, 220);
+  }
+}
+
+function updateJoystick(event) {
+  if (!joystickState.active || event.pointerId !== joystickState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  joystickState.direction = getJoystickDirection(event);
+  if (joystickState.direction && joystickState.direction !== joystickState.lastDirection) {
+    movePlayer(joystickState.direction);
+    joystickState.lastDirection = joystickState.direction;
+  }
+}
+
 function finishRound(outcome) {
   state.active = false;
   state.roundResults.push({
@@ -465,9 +539,10 @@ clearLearningButton.addEventListener("click", clearLearning);
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => setMode(button.dataset.mode));
 });
-moveButtons.forEach((button) => {
-  button.addEventListener("click", () => movePlayer(button.dataset.move));
-});
+joystick.addEventListener("pointerdown", startJoystick);
+joystick.addEventListener("pointermove", updateJoystick);
+joystick.addEventListener("pointerup", stopJoystick);
+joystick.addEventListener("pointercancel", stopJoystick);
 document.addEventListener("keydown", handleKeydown);
 
 render();

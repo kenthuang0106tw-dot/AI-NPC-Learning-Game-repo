@@ -209,7 +209,6 @@ h2 {
 }
 
 .controls,
-.mobile-pad,
 .mode-toggle {
   display: grid;
   gap: 10px;
@@ -224,7 +223,6 @@ h2 {
 }
 
 .controls button,
-.mobile-pad button,
 .mode-toggle button {
   min-height: 46px;
   padding: 10px 12px;
@@ -238,7 +236,6 @@ h2 {
 }
 
 .controls button:hover,
-.mobile-pad button:hover,
 .mode-toggle button:hover,
 .mode-toggle button.active {
   transform: translateY(-2px);
@@ -246,39 +243,66 @@ h2 {
   background: #fff7e7;
 }
 
-.mobile-pad {
-  grid-template-columns: repeat(3, minmax(0, 72px));
-  grid-template-areas:
-    ". up ."
-    "left . right"
-    ". down .";
-  justify-content: center;
+.joystick-wrap {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
   margin: 10px 0 16px;
 }
 
-.mobile-pad button {
-  min-width: 60px;
-  min-height: 52px;
-  padding: 0;
-  font-size: 1.2rem;
-  touch-action: manipulation;
+.joystick {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background:
+    radial-gradient(circle, rgba(237, 244, 239, 0.16) 0 28%, transparent 29%),
+    linear-gradient(145deg, rgba(117, 208, 181, 0.24), rgba(238, 180, 94, 0.14)),
+    rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.24), 0 16px 34px rgba(0, 0, 0, 0.24);
+  touch-action: none;
   user-select: none;
 }
 
-.pad-up {
-  grid-area: up;
+.joystick::before,
+.joystick::after {
+  content: "";
+  position: absolute;
+  background: rgba(237, 244, 239, 0.16);
 }
 
-.pad-left {
-  grid-area: left;
+.joystick::before {
+  left: 50%;
+  top: 14px;
+  width: 1px;
+  height: calc(100% - 28px);
 }
 
-.pad-right {
-  grid-area: right;
+.joystick::after {
+  left: 14px;
+  top: 50%;
+  width: calc(100% - 28px);
+  height: 1px;
 }
 
-.pad-down {
-  grid-area: down;
+.joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: #edf4ef;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  transition: transform 80ms ease-out;
+}
+
+.joystick-hint {
+  margin: 0;
+  color: #c5d2cb;
+  font-size: 0.88rem;
 }
 
 .data-panel {
@@ -420,16 +444,7 @@ h2 {
   }
 
   .controls,
-  .mobile-pad,
   .metric-grid {
     grid-template-columns: 1fr;
-  }
-
-  .mobile-pad {
-    grid-template-columns: repeat(3, minmax(58px, 72px));
-    grid-template-areas:
-      ". up ."
-      "left . right"
-      ". down .";
   }
 }

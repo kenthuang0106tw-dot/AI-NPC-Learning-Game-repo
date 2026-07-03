@@ -35,11 +35,11 @@
             <span><i class="wall-chip"></i>Wall</span>
           </div>
 
-          <div class="mobile-pad" aria-label="Mobile movement controls">
-            <button class="pad-up" data-move="up" aria-label="Move up">▲</button>
-            <button class="pad-left" data-move="left" aria-label="Move left">◀</button>
-            <button class="pad-right" data-move="right" aria-label="Move right">▶</button>
-            <button class="pad-down" data-move="down" aria-label="Move down">▼</button>
+          <div class="joystick-wrap" aria-label="Mobile joystick movement controls">
+            <div class="joystick" id="joystick" role="application" aria-label="Drag joystick to move">
+              <div class="joystick-knob" id="joystickKnob"></div>
+            </div>
+            <p class="joystick-hint">Drag the joystick to move on mobile.</p>
           </div>
 
           <div class="controls" aria-label="Experiment controls">

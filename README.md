@@ -17,7 +17,7 @@ Open `index.html` in a browser.
 
 1. Choose `Baseline` or `Learned`.
 2. Press `Start Round`.
-3. Move the player with WASD, arrow keys, or the on-screen mobile direction pad.
+3. Move the player with WASD, arrow keys, or the on-screen mobile joystick.
 4. Try to survive for 60 steps.
 5. Compare the result metrics after several rounds.
 
