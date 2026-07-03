@@ -3,79 +3,129 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI NPC Learning Game</title>
+    <title>AI NPC Route Learning Experiment</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <main class="app-shell">
-      <section class="stage" aria-label="NPC training simulator">
-        <div class="npc-panel">
-          <div class="npc-avatar" aria-hidden="true">
-            <div class="npc-face">
-              <span></span>
-            </div>
-          </div>
-          <div>
-            <p class="eyebrow">Prototype v0.1</p>
-            <h1>AI NPC Learning Game</h1>
-            <p class="intro">
-              Train an NPC by choosing lessons. Each choice changes how it thinks, talks, and reacts to scenario tests.
-            </p>
-          </div>
-        </div>
-
-        <div class="dialogue" id="dialogue">
-          Hello, trainer. I know very little right now, but I can learn from your choices.
-        </div>
-
-        <div class="actions" aria-label="Training actions">
-          <button data-train="logic">
-            <span>Logic Drill</span>
-            <small>Pattern solving</small>
-          </button>
-          <button data-train="empathy">
-            <span>Empathy Talk</span>
-            <small>Human context</small>
-          </button>
-          <button data-train="exploration">
-            <span>Explore World</span>
-            <small>Curiosity boost</small>
-          </button>
-        </div>
+      <section class="hero-panel" aria-labelledby="pageTitle">
+        <p class="eyebrow">Science Fair Prototype</p>
+        <h1 id="pageTitle">Can an AI NPC learn a player's escape route?</h1>
+        <p class="intro">
+          Play a short maze chase. The NPC first follows shortest paths, then learns the player's route heatmap and movement habits to predict better chase moves.
+        </p>
       </section>
 
-      <aside class="dashboard" aria-label="NPC state">
-        <section>
-          <div class="section-heading">
-            <h2>NPC Mind</h2>
-            <button class="icon-button" id="resetButton" title="Reset simulation" aria-label="Reset simulation">Reset</button>
+      <section class="experiment-grid">
+        <section class="game-panel" aria-label="Maze chase game">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">15 x 11 maze</p>
+              <h2>Escape Test</h2>
+            </div>
+            <div class="status-pill" id="roundStatus">Ready</div>
           </div>
-          <div class="stats">
-            <label>
-              Logic
-              <meter id="logicMeter" min="0" max="100" value="12"></meter>
-              <span id="logicValue">12</span>
-            </label>
-            <label>
-              Empathy
-              <meter id="empathyMeter" min="0" max="100" value="10"></meter>
-              <span id="empathyValue">10</span>
-            </label>
-            <label>
-              Exploration
-              <meter id="explorationMeter" min="0" max="100" value="14"></meter>
-              <span id="explorationValue">14</span>
-            </label>
+
+          <div class="game-board" id="gameBoard" aria-label="Maze board"></div>
+
+          <div class="legend" aria-label="Board legend">
+            <span><i class="player-chip"></i>Player</span>
+            <span><i class="npc-chip"></i>NPC</span>
+            <span><i class="heat-chip"></i>Learned route</span>
+            <span><i class="wall-chip"></i>Wall</span>
+          </div>
+
+          <div class="controls" aria-label="Experiment controls">
+            <button id="startRoundButton">Start Round</button>
+            <button id="resetRoundButton">Reset Round</button>
+            <button id="clearLearningButton">Clear Learning</button>
           </div>
         </section>
 
-        <section>
-          <h2>Scenario Test</h2>
-          <p id="scenarioText" class="scenario-text">A lost traveler asks for help near an unknown ruin.</p>
-          <button class="test-button" id="testButton">Test NPC Response</button>
-          <div class="response-log" id="responseLog" aria-live="polite"></div>
-        </section>
-      </aside>
+        <aside class="data-panel" aria-label="Experiment data">
+          <section>
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">NPC mode</p>
+                <h2>Chase Strategy</h2>
+              </div>
+            </div>
+            <div class="mode-toggle" role="group" aria-label="NPC mode">
+              <button class="active" data-mode="baseline">Baseline</button>
+              <button data-mode="learned">Learned</button>
+            </div>
+            <p class="mode-note" id="modeNote">
+              Baseline uses BFS shortest path to the player's current position.
+            </p>
+          </section>
+
+          <section>
+            <h2>Live Round</h2>
+            <div class="metric-grid">
+              <div>
+                <span id="stepCount">0</span>
+                <small>Steps</small>
+              </div>
+              <div>
+                <span id="roundLimit">60</span>
+                <small>Escape goal</small>
+              </div>
+              <div>
+                <span id="memoryCount">0</span>
+                <small>Learned cells</small>
+              </div>
+              <div>
+                <span id="predictionScore">0%</span>
+                <small>Prediction bias</small>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2>Results</h2>
+            <div class="comparison">
+              <label>
+                Baseline avg capture steps
+                <strong id="baselineAverage">--</strong>
+              </label>
+              <label>
+                Learned avg capture steps
+                <strong id="learnedAverage">--</strong>
+              </label>
+              <label>
+                Escape success rate
+                <strong id="escapeRate">--</strong>
+              </label>
+            </div>
+          </section>
+
+          <section>
+            <h2>Round Log</h2>
+            <ol class="round-log" id="roundLog" aria-live="polite"></ol>
+          </section>
+        </aside>
+      </section>
+
+      <section class="method-panel" aria-label="Science fair method">
+        <article>
+          <h2>Hypothesis</h2>
+          <p>
+            If the NPC stores where the player often runs and which direction they choose from each cell, then the learned NPC should catch the player in fewer steps than the baseline NPC.
+          </p>
+        </article>
+        <article>
+          <h2>Experiment</h2>
+          <p>
+            Run several baseline rounds, then several learned rounds. Compare average capture steps and escape success rate.
+          </p>
+        </article>
+        <article>
+          <h2>Learning Model</h2>
+          <p>
+            The learned NPC scores each next move using shortest-path distance, player route heat, and local movement transitions.
+          </p>
+        </article>
+      </section>
     </main>
 
     <script src="src/app.js"></script>
