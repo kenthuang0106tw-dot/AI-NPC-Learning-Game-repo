@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI NPC Learning Game</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="stage" aria-label="NPC training simulator">
+        <div class="npc-panel">
+          <div class="npc-avatar" aria-hidden="true">
+            <div class="npc-face">
+              <span></span>
+            </div>
+          </div>
+          <div>
+            <p class="eyebrow">Prototype v0.1</p>
+            <h1>AI NPC Learning Game</h1>
+            <p class="intro">
+              Train an NPC by choosing lessons. Each choice changes how it thinks, talks, and reacts to scenario tests.
+            </p>
+          </div>
+        </div>
+
+        <div class="dialogue" id="dialogue">
+          Hello, trainer. I know very little right now, but I can learn from your choices.
+        </div>
+
+        <div class="actions" aria-label="Training actions">
+          <button data-train="logic">
+            <span>Logic Drill</span>
+            <small>Pattern solving</small>
+          </button>
+          <button data-train="empathy">
+            <span>Empathy Talk</span>
+            <small>Human context</small>
+          </button>
+          <button data-train="exploration">
+            <span>Explore World</span>
+            <small>Curiosity boost</small>
+          </button>
+        </div>
+      </section>
+
+      <aside class="dashboard" aria-label="NPC state">
+        <section>
+          <div class="section-heading">
+            <h2>NPC Mind</h2>
+            <button class="icon-button" id="resetButton" title="Reset simulation" aria-label="Reset simulation">Reset</button>
+          </div>
+          <div class="stats">
+            <label>
+              Logic
+              <meter id="logicMeter" min="0" max="100" value="12"></meter>
+              <span id="logicValue">12</span>
+            </label>
+            <label>
+              Empathy
+              <meter id="empathyMeter" min="0" max="100" value="10"></meter>
+              <span id="empathyValue">10</span>
+            </label>
+            <label>
+              Exploration
+              <meter id="explorationMeter" min="0" max="100" value="14"></meter>
+              <span id="explorationValue">14</span>
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Scenario Test</h2>
+          <p id="scenarioText" class="scenario-text">A lost traveler asks for help near an unknown ruin.</p>
+          <button class="test-button" id="testButton">Test NPC Response</button>
+          <div class="response-log" id="responseLog" aria-live="polite"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="src/app.js"></script>
+  </body>
+</html>
