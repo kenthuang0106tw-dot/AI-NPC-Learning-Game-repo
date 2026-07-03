@@ -1,8 +1,8 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #101312;
-  color: #edf4ef;
+  background: #eaf7ff;
+  color: #17202a;
 }
 
 * {
@@ -13,42 +13,58 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 14% 8%, rgba(78, 167, 146, 0.28), transparent 28rem),
-    radial-gradient(circle at 90% 10%, rgba(238, 180, 94, 0.18), transparent 22rem),
-    linear-gradient(135deg, #101312 0%, #18221f 48%, #241f26 100%);
+    radial-gradient(circle at 12% 8%, rgba(255, 216, 77, 0.35), transparent 22rem),
+    radial-gradient(circle at 88% 12%, rgba(79, 176, 109, 0.28), transparent 24rem),
+    linear-gradient(180deg, #d7f1ff 0%, #f7fbff 100%);
 }
 
-button {
+button,
+input {
   font: inherit;
 }
 
-.app-shell {
-  width: min(1220px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 28px 0 36px;
-}
-
-.hero-panel,
-.game-panel,
-.data-panel,
-.method-panel {
-  border: 1px solid rgba(255, 255, 255, 0.12);
+button {
+  min-height: 46px;
+  border: 0;
   border-radius: 8px;
-  background: rgba(16, 19, 18, 0.78);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  background: #17202a;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+  transition: transform 140ms ease, background 140ms ease;
 }
 
-.hero-panel {
-  min-height: 220px;
-  padding: 32px;
-  margin-bottom: 22px;
+button:hover {
+  transform: translateY(-2px);
+  background: #2c3e50;
+}
+
+.app-shell {
+  width: min(1180px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 24px 0 36px;
+}
+
+.hero,
+.play-panel,
+.data-panel,
+.research-panel {
+  border: 1px solid rgba(23, 32, 42, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 54px rgba(23, 32, 42, 0.12);
+}
+
+.hero {
+  padding: 28px;
+  margin-bottom: 18px;
 }
 
 .eyebrow {
-  margin: 0 0 10px;
-  color: #eeb45e;
+  margin: 0 0 8px;
+  color: #2d8a4f;
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -60,34 +76,33 @@ p {
 }
 
 h1 {
-  max-width: 900px;
-  margin-bottom: 16px;
-  font-size: clamp(2.25rem, 6vw, 5.25rem);
-  line-height: 0.96;
+  margin-bottom: 12px;
+  font-size: clamp(2.2rem, 7vw, 5rem);
+  line-height: 0.95;
 }
 
 h2 {
-  margin-bottom: 12px;
-  font-size: 1.05rem;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
 }
 
 .intro {
   max-width: 760px;
   margin-bottom: 0;
-  color: #c5d2cb;
-  font-size: 1.08rem;
-  line-height: 1.7;
+  color: #405366;
+  font-size: 1.05rem;
+  line-height: 1.65;
 }
 
-.experiment-grid {
+.game-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
 }
 
-.game-panel,
+.play-panel,
 .data-panel {
-  padding: 22px;
+  padding: 20px;
 }
 
 .panel-heading {
@@ -95,225 +110,63 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
-}
-
-.panel-heading.compact {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .status-pill {
-  max-width: 360px;
-  min-height: 38px;
+  max-width: 320px;
+  min-height: 36px;
   padding: 9px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #dbe7e0;
-  font-size: 0.88rem;
+  background: #ecf4f8;
+  color: #405366;
+  font-size: 0.9rem;
   text-align: right;
 }
 
-.status-pill.running {
-  background: rgba(117, 208, 181, 0.2);
-  color: #9bf0d7;
-}
-
-.game-board {
-  display: grid;
-  grid-template-columns: repeat(15, minmax(22px, 1fr));
-  gap: 5px;
-  width: min(100%, 760px);
-  aspect-ratio: 15 / 11;
+#gameCanvas {
+  display: block;
+  width: min(100%, 480px);
+  aspect-ratio: 3 / 4;
   margin: 0 auto;
-  padding: 10px;
+  border: 4px solid #17202a;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #8ed8ff;
+  touch-action: manipulation;
 }
 
-.cell {
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  min-height: 0;
-  border-radius: 5px;
-  background: #21322c;
-  color: #0d1512;
-  font-weight: 900;
-  font-size: clamp(0.72rem, 2vw, 1.05rem);
-  transition: background 120ms ease, transform 120ms ease;
-}
-
-.cell.wall {
-  background: #080b0a;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-}
-
-.cell.visited {
-  background:
-    linear-gradient(rgba(238, 180, 94, calc(var(--heat) * 0.72)), rgba(238, 180, 94, calc(var(--heat) * 0.72))),
-    #21322c;
-}
-
-.cell.player {
-  background: #75d0b5;
-  transform: scale(1.04);
-}
-
-.cell.npc {
-  background: #ff6b5f;
-  color: #fff5f2;
-  transform: scale(1.04);
-}
-
-.cell.player.npc {
-  background: linear-gradient(135deg, #75d0b5 0 50%, #ff6b5f 50% 100%);
-}
-
-.legend {
+.quick-help {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 16px 0;
-  color: #c5d2cb;
-  font-size: 0.9rem;
-}
-
-.legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.legend i {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.player-chip {
-  background: #75d0b5;
-}
-
-.npc-chip {
-  background: #ff6b5f;
-}
-
-.heat-chip {
-  background: #eeb45e;
-}
-
-.wall-chip {
-  background: #080b0a;
-}
-
-.controls,
-.mode-toggle {
-  display: grid;
-  gap: 10px;
-}
-
-.controls {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.mode-toggle {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.controls button,
-.mode-toggle button {
-  min-height: 46px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  background: #edf4ef;
-  color: #111715;
-  cursor: pointer;
-  font-weight: 800;
-  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-
-.controls button:hover,
-.mode-toggle button:hover,
-.mode-toggle button.active {
-  transform: translateY(-2px);
-  border-color: #eeb45e;
-  background: #fff7e7;
-}
-
-.joystick-wrap {
-  display: grid;
-  justify-items: center;
+  justify-content: center;
   gap: 8px;
-  margin: 10px 0 16px;
+  margin: 14px 0;
 }
 
-.joystick {
-  position: relative;
-  width: 132px;
-  height: 132px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background:
-    radial-gradient(circle, rgba(237, 244, 239, 0.16) 0 28%, transparent 29%),
-    linear-gradient(145deg, rgba(117, 208, 181, 0.24), rgba(238, 180, 94, 0.14)),
-    rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.24), 0 16px 34px rgba(0, 0, 0, 0.24);
-  touch-action: none;
-  user-select: none;
+.quick-help span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #ecf4f8;
+  color: #405366;
+  font-weight: 800;
+  font-size: 0.86rem;
 }
 
-.joystick::before,
-.joystick::after {
-  content: "";
-  position: absolute;
-  background: rgba(237, 244, 239, 0.16);
-}
-
-.joystick::before {
-  left: 50%;
-  top: 14px;
-  width: 1px;
-  height: calc(100% - 28px);
-}
-
-.joystick::after {
-  left: 14px;
-  top: 50%;
-  width: calc(100% - 28px);
-  height: 1px;
-}
-
-.joystick-knob {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 54px;
-  height: 54px;
-  margin: -27px 0 0 -27px;
-  border-radius: 50%;
-  background: #edf4ef;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
-  transition: transform 80ms ease-out;
-}
-
-.joystick-hint {
-  margin: 0;
-  color: #c5d2cb;
-  font-size: 0.88rem;
+.control-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .data-panel {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 16px;
 }
 
 .data-panel section {
-  padding-bottom: 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(23, 32, 42, 0.1);
 }
 
 .data-panel section:last-child {
@@ -321,11 +174,20 @@ h2 {
   border-bottom: 0;
 }
 
-.mode-note {
-  min-height: 48px;
-  margin: 12px 0 0;
-  color: #c5d2cb;
-  line-height: 1.55;
+.speed-options {
+  display: grid;
+  gap: 8px;
+}
+
+.speed-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #ecf4f8;
+  font-weight: 800;
 }
 
 .metric-grid {
@@ -335,116 +197,94 @@ h2 {
 }
 
 .metric-grid div,
-.comparison label,
-.round-log li {
+.dashboard div {
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: #ecf4f8;
 }
 
 .metric-grid div {
   display: grid;
   gap: 2px;
-  padding: 14px;
+  padding: 13px;
 }
 
-.metric-grid span {
-  font-size: 1.55rem;
-  font-weight: 900;
+.metric-grid strong {
+  font-size: 1.5rem;
 }
 
-.metric-grid small,
-.comparison label {
-  color: #c5d2cb;
+.metric-grid span,
+.dashboard dt {
+  color: #607487;
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
-.comparison {
+.dashboard {
   display: grid;
-  gap: 10px;
+  gap: 9px;
+  margin: 0;
 }
 
-.comparison label {
+.dashboard div {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
-  line-height: 1.35;
+  padding: 11px;
 }
 
-.comparison strong {
-  color: #edf4ef;
-  font-size: 1.12rem;
-}
-
-.round-log {
-  display: grid;
-  gap: 8px;
+.dashboard dd {
   margin: 0;
-  padding-left: 0;
-  list-style: none;
+  font-weight: 900;
+  text-align: right;
 }
 
-.round-log li {
-  padding: 10px 12px;
-  color: #d7e4dc;
-  line-height: 1.4;
-}
-
-.method-panel {
+.research-panel {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
-  margin-top: 22px;
-  padding: 24px;
+  margin-top: 18px;
+  padding: 22px;
 }
 
-.method-panel p {
+.research-panel p {
   margin-bottom: 0;
-  color: #c5d2cb;
-  line-height: 1.6;
+  color: #405366;
+  line-height: 1.55;
 }
 
-@media (max-width: 940px) {
-  .experiment-grid,
-  .method-panel {
+@media (max-width: 920px) {
+  .game-layout,
+  .research-panel {
     grid-template-columns: 1fr;
-  }
-
-  .data-panel {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 620px) {
-  .app-shell {
-    width: min(100% - 20px, 1220px);
-    padding-top: 14px;
-  }
-
-  .hero-panel,
-  .game-panel,
-  .data-panel,
-  .method-panel {
-    padding: 16px;
-  }
-
-  .panel-heading {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .status-pill {
     max-width: none;
     text-align: left;
   }
+}
 
-  .game-board {
-    gap: 3px;
-    padding: 6px;
+@media (max-width: 620px) {
+  .app-shell {
+    width: min(100% - 18px, 1180px);
+    padding-top: 12px;
   }
 
-  .controls,
+  .hero,
+  .play-panel,
+  .data-panel,
+  .research-panel {
+    padding: 15px;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .control-row,
   .metric-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 }

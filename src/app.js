@@ -1,548 +1,490 @@
-const MAZE = [
-  "###############",
-  "#.....#.......#",
-  "#.###.#.#####.#",
-  "#...#...#.....#",
-  "###.#.###.###.#",
-  "#...#.....#...#",
-  "#.#######.#.#.#",
-  "#.....#...#.#.#",
-  "#.###.#.###.#.#",
-  "#.......#.....#",
-  "###############",
-];
+// Flappy Skill Lab MVP
+// This file intentionally keeps the game simple and readable for a science fair project.
 
-const WIDTH = 15;
-const HEIGHT = 11;
-const ROUND_LIMIT = 60;
-const START_PLAYER = { x: 1, y: 1 };
-const START_NPC = { x: 13, y: 9 };
-const DIRECTIONS = [
-  { name: "up", dx: 0, dy: -1 },
-  { name: "right", dx: 1, dy: 0 },
-  { name: "down", dx: 0, dy: 1 },
-  { name: "left", dx: -1, dy: 0 },
-];
+const STORAGE_KEY = "flappy_skill_lab_logs_v1";
+const CANVAS_WIDTH = 480;
+const CANVAS_HEIGHT = 640;
+const BIRD_X = 120;
+const BIRD_RADIUS = 16;
+const GROUND_Y = CANVAS_HEIGHT - 54;
+const GAP_SIZE = 150;
+const PIPE_WIDTH = 70;
+const PIPE_SPACING = 260;
 
-const state = {
-  mode: "baseline",
-  active: false,
-  player: { ...START_PLAYER },
-  npc: { ...START_NPC },
-  steps: 0,
-  cellVisits: createVisitGrid(),
-  transitionCounts: {},
-  roundResults: [],
-  lastMessage: "Press Start Round, then use WASD or arrow keys to escape.",
+const SPEED_SETTINGS = {
+  slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
+  normal: { gravity: 0.44, flap: -7.8, pipeSpeed: 2.8 },
+  fast: { gravity: 0.52, flap: -8.4, pipeSpeed: 3.6 },
 };
 
-const board = document.querySelector("#gameBoard");
-const roundStatus = document.querySelector("#roundStatus");
-const startRoundButton = document.querySelector("#startRoundButton");
-const resetRoundButton = document.querySelector("#resetRoundButton");
-const clearLearningButton = document.querySelector("#clearLearningButton");
-const modeButtons = document.querySelectorAll("[data-mode]");
-const joystick = document.querySelector("#joystick");
-const joystickKnob = document.querySelector("#joystickKnob");
-const modeNote = document.querySelector("#modeNote");
-const stepCount = document.querySelector("#stepCount");
-const roundLimit = document.querySelector("#roundLimit");
-const memoryCount = document.querySelector("#memoryCount");
-const predictionScore = document.querySelector("#predictionScore");
-const baselineAverage = document.querySelector("#baselineAverage");
-const learnedAverage = document.querySelector("#learnedAverage");
-const escapeRate = document.querySelector("#escapeRate");
-const roundLog = document.querySelector("#roundLog");
-const joystickState = {
-  active: false,
-  pointerId: null,
-  intervalId: null,
-  direction: null,
-  lastDirection: null,
+const canvas = document.querySelector("#gameCanvas");
+const ctx = canvas.getContext("2d");
+const startButton = document.querySelector("#startButton");
+const restartButton = document.querySelector("#restartButton");
+const exportButton = document.querySelector("#exportButton");
+const clearButton = document.querySelector("#clearButton");
+const speedInputs = document.querySelectorAll("input[name='speed']");
+
+const gameStatus = document.querySelector("#gameStatus");
+const scoreValue = document.querySelector("#scoreValue");
+const timeValue = document.querySelector("#timeValue");
+const frameValue = document.querySelector("#frameValue");
+const savedRowsValue = document.querySelector("#savedRowsValue");
+const survivalTime = document.querySelector("#survivalTime");
+const finalScore = document.querySelector("#finalScore");
+const clicksPerSecond = document.querySelector("#clicksPerSecond");
+const averageError = document.querySelector("#averageError");
+const deathReason = document.querySelector("#deathReason");
+const heightVariation = document.querySelector("#heightVariation");
+
+let allLogs = loadLogs();
+let animationId = null;
+let pendingClick = false;
+let currentGameLogs = [];
+let clickEvents = [];
+
+const game = {
+  running: false,
+  over: false,
+  gameId: "",
+  speedLevel: "normal",
+  frame: 0,
+  startTime: 0,
+  lastFrameTime: 0,
+  birdY: CANVAS_HEIGHT / 2,
+  birdVy: 0,
+  pipes: [],
+  score: 0,
+  lastClickTime: null,
+  deathReason: "none",
 };
 
-function createVisitGrid() {
-  return Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(0));
-}
-
-function keyOf(position) {
-  return `${position.x},${position.y}`;
-}
-
-function sameCell(a, b) {
-  return a.x === b.x && a.y === b.y;
-}
-
-function isWall(x, y) {
-  return y < 0 || y >= HEIGHT || x < 0 || x >= WIDTH || MAZE[y][x] === "#";
-}
-
-function getNeighbors(position) {
-  return DIRECTIONS
-    .map((direction) => ({
-      x: position.x + direction.dx,
-      y: position.y + direction.dy,
-      direction: direction.name,
-    }))
-    .filter((next) => !isWall(next.x, next.y));
-}
-
-function directionFrom(a, b) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const match = DIRECTIONS.find((direction) => direction.dx === dx && direction.dy === dy);
-  return match ? match.name : null;
-}
-
-function recordPlayerMove(from, to) {
-  state.cellVisits[to.y][to.x] += 1;
-
-  const direction = directionFrom(from, to);
-  if (!direction) {
-    return;
+function loadLogs() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  } catch {
+    return [];
   }
-
-  const fromKey = keyOf(from);
-  if (!state.transitionCounts[fromKey]) {
-    state.transitionCounts[fromKey] = { up: 0, right: 0, down: 0, left: 0 };
-  }
-  state.transitionCounts[fromKey][direction] += 1;
 }
 
-function shortestPathNext(start, target) {
-  const queue = [{ ...start, first: null }];
-  const visited = new Set([keyOf(start)]);
-
-  while (queue.length) {
-    const current = queue.shift();
-    if (sameCell(current, target)) {
-      return current.first || start;
-    }
-
-    for (const next of getNeighbors(current)) {
-      const nextKey = keyOf(next);
-      if (visited.has(nextKey)) {
-        continue;
-      }
-      visited.add(nextKey);
-      queue.push({
-        ...next,
-        first: current.first || { x: next.x, y: next.y },
-      });
-    }
-  }
-
-  return start;
+function saveLogs() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(allLogs));
+  savedRowsValue.textContent = allLogs.length;
 }
 
-function pathDistance(start, target) {
-  if (sameCell(start, target)) {
-    return 0;
-  }
-
-  const queue = [{ ...start, distance: 0 }];
-  const visited = new Set([keyOf(start)]);
-
-  while (queue.length) {
-    const current = queue.shift();
-    for (const next of getNeighbors(current)) {
-      const nextKey = keyOf(next);
-      if (visited.has(nextKey)) {
-        continue;
-      }
-      if (sameCell(next, target)) {
-        return current.distance + 1;
-      }
-      visited.add(nextKey);
-      queue.push({ ...next, distance: current.distance + 1 });
-    }
-  }
-
-  return 999;
+function getSpeedLevel() {
+  const selected = [...speedInputs].find((input) => input.checked);
+  return selected ? selected.value : "normal";
 }
 
-function predictPlayerNextCell() {
-  const transitions = state.transitionCounts[keyOf(state.player)];
-  if (!transitions) {
-    return state.player;
-  }
+function randomGapCenter() {
+  return 150 + Math.random() * (GROUND_Y - 270);
+}
 
-  const bestDirection = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
-  if (!bestDirection || bestDirection[1] === 0) {
-    return state.player;
-  }
-
-  const direction = DIRECTIONS.find((entry) => entry.name === bestDirection[0]);
-  const predicted = {
-    x: state.player.x + direction.dx,
-    y: state.player.y + direction.dy,
+function createPipe(x) {
+  return {
+    x,
+    gapCenter: randomGapCenter(),
+    gapSize: GAP_SIZE,
+    passed: false,
   };
-
-  return isWall(predicted.x, predicted.y) ? state.player : predicted;
 }
 
-function learnedNpcNext() {
-  const predicted = predictPlayerNextCell();
-  const candidates = getNeighbors(state.npc);
-  let bestMove = state.npc;
-  let bestScore = -Infinity;
+function resetGame() {
+  window.cancelAnimationFrame(animationId);
+  animationId = null;
+  pendingClick = false;
+  currentGameLogs = [];
+  clickEvents = [];
 
-  for (const candidate of candidates) {
-    const distanceScore = 40 - pathDistance(candidate, predicted) * 6;
-    const heatScore = state.cellVisits[candidate.y][candidate.x] * 3;
-    const transitionScore = getTransitionBias(candidate) * 4;
-    const currentPlayerScore = 20 - pathDistance(candidate, state.player) * 2;
-    const score = distanceScore + heatScore + transitionScore + currentPlayerScore;
+  game.running = false;
+  game.over = false;
+  game.gameId = `game_${Date.now()}`;
+  game.speedLevel = getSpeedLevel();
+  game.frame = 0;
+  game.startTime = 0;
+  game.lastFrameTime = 0;
+  game.birdY = CANVAS_HEIGHT / 2;
+  game.birdVy = 0;
+  game.pipes = [createPipe(560), createPipe(560 + PIPE_SPACING)];
+  game.score = 0;
+  game.lastClickTime = null;
+  game.deathReason = "none";
 
-    if (score > bestScore) {
-      bestScore = score;
-      bestMove = { x: candidate.x, y: candidate.y };
-    }
+  gameStatus.textContent = "Ready. Press Start, Space, click, or tap.";
+  updateLiveMetrics(0);
+  resetDashboard();
+  drawScene();
+}
+
+function startGame() {
+  resetGame();
+  game.running = true;
+  game.startTime = performance.now();
+  game.lastFrameTime = game.startTime;
+  gameStatus.textContent = "Playing. Tap once to fly upward.";
+  animationId = window.requestAnimationFrame(update);
+}
+
+function restartGame() {
+  startGame();
+}
+
+function flap() {
+  if (!game.running) {
+    return;
   }
-
-  return bestMove;
+  pendingClick = true;
 }
 
-function getTransitionBias(candidate) {
-  let bias = 0;
-  for (const neighbor of getNeighbors(candidate)) {
-    const transitions = state.transitionCounts[keyOf(neighbor)];
-    if (!transitions) {
-      continue;
-    }
-    const direction = directionFrom(neighbor, candidate);
-    bias += transitions[direction] || 0;
-  }
-  return bias;
-}
-
-function npcMove() {
-  state.npc = state.mode === "baseline" ? shortestPathNext(state.npc, state.player) : learnedNpcNext();
-}
-
-function movePlayer(directionName) {
-  if (!state.active) {
-    state.lastMessage = "Start a round before moving.";
-    render();
+function update(now) {
+  if (!game.running) {
     return;
   }
 
-  const direction = DIRECTIONS.find((entry) => entry.name === directionName);
-  const next = {
-    x: state.player.x + direction.dx,
-    y: state.player.y + direction.dy,
+  const settings = SPEED_SETTINGS[game.speedLevel];
+  const elapsedSeconds = (now - game.startTime) / 1000;
+  const dt = Math.min((now - game.lastFrameTime) / 16.67, 2);
+  game.lastFrameTime = now;
+  game.frame += 1;
+
+  const nextPipe = getNextPipe();
+  const isClick = pendingClick;
+  let clickInterval = "";
+  let errorToCenter = "";
+  let nextPipeDistance = nextPipe ? nextPipe.x - BIRD_X : "";
+
+  if (isClick) {
+    game.birdVy = settings.flap;
+    clickInterval = game.lastClickTime === null ? "" : ((now - game.lastClickTime) / 1000).toFixed(3);
+    game.lastClickTime = now;
+    errorToCenter = nextPipe ? (game.birdY - nextPipe.gapCenter).toFixed(2) : "";
+    clickEvents.push({
+      clickInterval: clickInterval === "" ? null : Number(clickInterval),
+      errorToCenter: errorToCenter === "" ? null : Number(errorToCenter),
+      nextPipeDistance: nextPipeDistance === "" ? null : Number(nextPipeDistance.toFixed(2)),
+    });
+  }
+  pendingClick = false;
+
+  game.birdVy += settings.gravity * dt;
+  game.birdY += game.birdVy * dt;
+
+  movePipes(settings.pipeSpeed * dt);
+  updateScore();
+
+  const death = getDeathReason();
+  const isDead = death !== "none";
+  if (isDead) {
+    game.deathReason = death;
+  }
+
+  logFrame({
+    time: elapsedSeconds,
+    isClick,
+    clickInterval,
+    errorToCenter,
+    isDead,
+    deathReason: game.deathReason,
+  });
+
+  drawScene();
+  updateLiveMetrics(elapsedSeconds);
+
+  if (isDead) {
+    endGame(elapsedSeconds);
+    return;
+  }
+
+  animationId = window.requestAnimationFrame(update);
+}
+
+function movePipes(speed) {
+  for (const pipe of game.pipes) {
+    pipe.x -= speed;
+  }
+
+  if (game.pipes[0].x + PIPE_WIDTH < 0) {
+    game.pipes.shift();
+    const lastPipe = game.pipes[game.pipes.length - 1];
+    game.pipes.push(createPipe(lastPipe.x + PIPE_SPACING));
+  }
+}
+
+function updateScore() {
+  for (const pipe of game.pipes) {
+    if (!pipe.passed && pipe.x + PIPE_WIDTH < BIRD_X) {
+      pipe.passed = true;
+      game.score += 1;
+    }
+  }
+}
+
+function getNextPipe() {
+  return game.pipes.find((pipe) => pipe.x + PIPE_WIDTH >= BIRD_X) || game.pipes[0];
+}
+
+function getDeathReason() {
+  if (game.birdY + BIRD_RADIUS >= GROUND_Y) {
+    return "hit_ground";
+  }
+
+  const pipe = getNextPipe();
+  const birdRight = BIRD_X + BIRD_RADIUS;
+  const birdLeft = BIRD_X - BIRD_RADIUS;
+  const pipeRight = pipe.x + PIPE_WIDTH;
+  const gapTop = pipe.gapCenter - pipe.gapSize / 2;
+  const gapBottom = pipe.gapCenter + pipe.gapSize / 2;
+
+  if (birdRight >= pipe.x && birdLeft <= pipeRight) {
+    if (game.birdY - BIRD_RADIUS < gapTop) {
+      return "hit_top_pipe";
+    }
+    if (game.birdY + BIRD_RADIUS > gapBottom) {
+      return "hit_bottom_pipe";
+    }
+  }
+
+  return "none";
+}
+
+function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathReason }) {
+  const pipe = getNextPipe();
+  const row = {
+    game_id: game.gameId,
+    time: time.toFixed(3),
+    frame: game.frame,
+    speed_level: game.speedLevel,
+    bird_y: game.birdY.toFixed(2),
+    bird_vy: game.birdVy.toFixed(2),
+    pipe_x: pipe.x.toFixed(2),
+    pipe_gap_center: pipe.gapCenter.toFixed(2),
+    pipe_gap_size: pipe.gapSize,
+    next_pipe_distance: (pipe.x - BIRD_X).toFixed(2),
+    score: game.score,
+    is_click: isClick ? 1 : 0,
+    is_dead: isDead ? 1 : 0,
+    death_reason: deathReason,
+    click_interval: clickInterval,
+    error_to_center: errorToCenter,
   };
-
-  if (isWall(next.x, next.y)) {
-    state.lastMessage = "Wall blocked the player. Try another route.";
-    render();
-    return;
-  }
-
-  const previous = { ...state.player };
-  state.player = next;
-  state.steps += 1;
-  recordPlayerMove(previous, state.player);
-
-  if (sameCell(state.player, state.npc)) {
-    finishRound("caught");
-    return;
-  }
-
-  npcMove();
-
-  if (sameCell(state.player, state.npc)) {
-    finishRound("caught");
-    return;
-  }
-
-  if (state.steps >= ROUND_LIMIT) {
-    finishRound("escaped");
-    return;
-  }
-
-  state.lastMessage =
-    state.mode === "baseline"
-      ? "Baseline NPC moved by shortest path."
-      : "Learned NPC used route heat and transition memory.";
-  render();
+  currentGameLogs.push(row);
 }
 
-function getJoystickDirection(event) {
-  const rect = joystick.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-  const dx = event.clientX - centerX;
-  const dy = event.clientY - centerY;
-  const distance = Math.min(Math.hypot(dx, dy), rect.width * 0.34);
-  const angle = Math.atan2(dy, dx);
-  const knobX = Math.cos(angle) * distance;
-  const knobY = Math.sin(angle) * distance;
-
-  joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
-
-  if (distance < rect.width * 0.12) {
-    return null;
-  }
-
-  return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+function endGame(elapsedSeconds) {
+  game.running = false;
+  game.over = true;
+  window.cancelAnimationFrame(animationId);
+  animationId = null;
+  allLogs = allLogs.concat(currentGameLogs);
+  saveLogs();
+  showDashboard(elapsedSeconds);
+  gameStatus.textContent = `Game over: ${game.deathReason}`;
+  drawScene();
 }
 
-function stopJoystick() {
-  joystickState.active = false;
-  joystickState.pointerId = null;
-  joystickState.direction = null;
-  joystickState.lastDirection = null;
-  joystickKnob.style.transform = "translate(0, 0)";
+function resetDashboard() {
+  survivalTime.textContent = "--";
+  finalScore.textContent = "--";
+  clicksPerSecond.textContent = "--";
+  averageError.textContent = "--";
+  deathReason.textContent = "--";
+  heightVariation.textContent = "--";
+}
 
-  if (joystickState.intervalId) {
-    window.clearInterval(joystickState.intervalId);
-    joystickState.intervalId = null;
+function showDashboard(elapsedSeconds) {
+  const clicks = clickEvents.length;
+  const absErrors = clickEvents
+    .map((event) => event.errorToCenter)
+    .filter((value) => typeof value === "number")
+    .map((value) => Math.abs(value));
+  const heights = currentGameLogs.map((row) => Number(row.bird_y));
+
+  survivalTime.textContent = `${elapsedSeconds.toFixed(2)}s`;
+  finalScore.textContent = game.score;
+  clicksPerSecond.textContent = elapsedSeconds > 0 ? (clicks / elapsedSeconds).toFixed(2) : "0.00";
+  averageError.textContent = absErrors.length ? average(absErrors).toFixed(2) : "--";
+  deathReason.textContent = game.deathReason;
+  heightVariation.textContent = heights.length ? standardDeviation(heights).toFixed(2) : "--";
+}
+
+function average(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values) {
+  const avg = average(values);
+  const variance = average(values.map((value) => (value - avg) ** 2));
+  return Math.sqrt(variance);
+}
+
+function updateLiveMetrics(elapsedSeconds) {
+  scoreValue.textContent = game.score;
+  timeValue.textContent = `${elapsedSeconds.toFixed(1)}s`;
+  frameValue.textContent = game.frame;
+  savedRowsValue.textContent = allLogs.length;
+}
+
+function drawScene() {
+  ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  drawBackground();
+  drawPipes();
+  drawBird();
+  drawGround();
+  drawHud();
+}
+
+function drawBackground() {
+  const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+  gradient.addColorStop(0, "#8ed8ff");
+  gradient.addColorStop(1, "#eaf7ff");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+  drawCloud(90, 90);
+  drawCloud(330, 150);
+}
+
+function drawCloud(x, y) {
+  ctx.beginPath();
+  ctx.arc(x, y, 22, 0, Math.PI * 2);
+  ctx.arc(x + 24, y - 8, 28, 0, Math.PI * 2);
+  ctx.arc(x + 56, y, 20, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPipes() {
+  for (const pipe of game.pipes) {
+    const topHeight = pipe.gapCenter - pipe.gapSize / 2;
+    const bottomY = pipe.gapCenter + pipe.gapSize / 2;
+    ctx.fillStyle = "#4fb06d";
+    ctx.fillRect(pipe.x, 0, PIPE_WIDTH, topHeight);
+    ctx.fillRect(pipe.x, bottomY, PIPE_WIDTH, GROUND_Y - bottomY);
+    ctx.fillStyle = "#337b4b";
+    ctx.fillRect(pipe.x - 4, topHeight - 20, PIPE_WIDTH + 8, 20);
+    ctx.fillRect(pipe.x - 4, bottomY, PIPE_WIDTH + 8, 20);
   }
 }
 
-function startJoystick(event) {
+function drawBird() {
+  ctx.save();
+  ctx.translate(BIRD_X, game.birdY);
+  ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)));
+  ctx.fillStyle = "#ffd84d";
+  ctx.beginPath();
+  ctx.arc(0, 0, BIRD_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ff9f1c";
+  ctx.beginPath();
+  ctx.moveTo(12, -2);
+  ctx.lineTo(28, 5);
+  ctx.lineTo(12, 12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#111827";
+  ctx.beginPath();
+  ctx.arc(6, -7, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGround() {
+  ctx.fillStyle = "#77b255";
+  ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+  ctx.fillStyle = "#5c913b";
+  ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, 8);
+}
+
+function drawHud() {
+  ctx.fillStyle = "rgba(17, 24, 39, 0.78)";
+  ctx.fillRect(14, 14, 150, 66);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 20px system-ui";
+  ctx.fillText(`Score: ${game.score}`, 28, 42);
+  ctx.font = "500 14px system-ui";
+  ctx.fillText(`Speed: ${game.speedLevel}`, 28, 64);
+
+  if (!game.running && !game.over) {
+    drawCenterText("Press Start", "Space / click / touch makes the bird fly");
+  }
+  if (game.over) {
+    drawCenterText("Game Over", game.deathReason);
+  }
+}
+
+function drawCenterText(title, subtitle) {
+  ctx.fillStyle = "rgba(17, 24, 39, 0.72)";
+  ctx.fillRect(70, 250, 340, 108);
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.font = "800 34px system-ui";
+  ctx.fillText(title, CANVAS_WIDTH / 2, 296);
+  ctx.font = "500 16px system-ui";
+  ctx.fillText(subtitle, CANVAS_WIDTH / 2, 326);
+  ctx.textAlign = "left";
+}
+
+function exportCsv() {
+  const headers = [
+    "game_id",
+    "time",
+    "frame",
+    "speed_level",
+    "bird_y",
+    "bird_vy",
+    "pipe_x",
+    "pipe_gap_center",
+    "pipe_gap_size",
+    "next_pipe_distance",
+    "score",
+    "is_click",
+    "is_dead",
+    "death_reason",
+    "click_interval",
+    "error_to_center",
+  ];
+  const csvRows = [
+    headers.join(","),
+    ...allLogs.map((row) => headers.map((header) => csvCell(row[header])).join(",")),
+  ];
+  const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `flappy_skill_lab_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function clearData() {
+  if (!window.confirm("Clear all saved experiment data?")) {
+    return;
+  }
+  allLogs = [];
+  saveLogs();
+  gameStatus.textContent = "Saved data cleared.";
+}
+
+startButton.addEventListener("click", startGame);
+restartButton.addEventListener("click", restartGame);
+exportButton.addEventListener("click", exportCsv);
+clearButton.addEventListener("click", clearData);
+canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
-  joystickState.active = true;
-  joystickState.pointerId = event.pointerId;
-  joystick.setPointerCapture(event.pointerId);
-  joystickState.direction = getJoystickDirection(event);
-  joystickState.lastDirection = joystickState.direction;
-
-  if (joystickState.direction) {
-    movePlayer(joystickState.direction);
-  }
-
-  if (!joystickState.intervalId) {
-    joystickState.intervalId = window.setInterval(() => {
-      if (joystickState.direction) {
-        movePlayer(joystickState.direction);
-      }
-    }, 220);
-  }
-}
-
-function updateJoystick(event) {
-  if (!joystickState.active || event.pointerId !== joystickState.pointerId) {
-    return;
-  }
-  event.preventDefault();
-  joystickState.direction = getJoystickDirection(event);
-  if (joystickState.direction && joystickState.direction !== joystickState.lastDirection) {
-    movePlayer(joystickState.direction);
-    joystickState.lastDirection = joystickState.direction;
-  }
-}
-
-function finishRound(outcome) {
-  state.active = false;
-  state.roundResults.push({
-    mode: state.mode,
-    outcome,
-    steps: state.steps,
-  });
-  state.lastMessage =
-    outcome === "caught"
-      ? `NPC caught the player in ${state.steps} steps.`
-      : `Player escaped for ${ROUND_LIMIT} steps.`;
-  render();
-}
-
-function startRound() {
-  state.active = true;
-  state.player = { ...START_PLAYER };
-  state.npc = { ...START_NPC };
-  state.steps = 0;
-  state.cellVisits[state.player.y][state.player.x] += 1;
-  state.lastMessage = "Round started. Use WASD or arrow keys to escape.";
-  render();
-}
-
-function resetRound() {
-  state.active = false;
-  state.player = { ...START_PLAYER };
-  state.npc = { ...START_NPC };
-  state.steps = 0;
-  state.lastMessage = "Round reset. Press Start Round when ready.";
-  render();
-}
-
-function clearLearning() {
-  state.cellVisits = createVisitGrid();
-  state.transitionCounts = {};
-  state.roundResults = [];
-  state.lastMessage = "Learning memory and results cleared.";
-  render();
-}
-
-function setMode(mode) {
-  state.mode = mode;
-  state.active = false;
-  state.player = { ...START_PLAYER };
-  state.npc = { ...START_NPC };
-  state.steps = 0;
-  state.lastMessage =
-    mode === "baseline"
-      ? "Baseline mode: NPC only follows shortest paths."
-      : "Learned mode: NPC predicts using route heat and transitions.";
-  render();
-}
-
-function getMaxVisit() {
-  return Math.max(1, ...state.cellVisits.flat());
-}
-
-function countLearnedCells() {
-  return state.cellVisits.flat().filter((count) => count > 0).length;
-}
-
-function calculatePredictionBias() {
-  const totalTransitions = Object.values(state.transitionCounts).reduce(
-    (sum, transitions) => sum + Object.values(transitions).reduce((a, b) => a + b, 0),
-    0,
-  );
-  if (totalTransitions === 0) {
-    return 0;
-  }
-  const strongestChoices = Object.values(state.transitionCounts).reduce(
-    (sum, transitions) => sum + Math.max(...Object.values(transitions)),
-    0,
-  );
-  return Math.round((strongestChoices / totalTransitions) * 100);
-}
-
-function averageCaptureSteps(mode) {
-  const captures = state.roundResults.filter(
-    (result) => result.mode === mode && result.outcome === "caught",
-  );
-  if (!captures.length) {
-    return "--";
-  }
-  const average = captures.reduce((sum, result) => sum + result.steps, 0) / captures.length;
-  return average.toFixed(1);
-}
-
-function getEscapeRate() {
-  if (!state.roundResults.length) {
-    return "--";
-  }
-  const escapes = state.roundResults.filter((result) => result.outcome === "escaped").length;
-  return `${Math.round((escapes / state.roundResults.length) * 100)}%`;
-}
-
-function renderBoard() {
-  const maxVisit = getMaxVisit();
-  board.innerHTML = "";
-
-  for (let y = 0; y < HEIGHT; y += 1) {
-    for (let x = 0; x < WIDTH; x += 1) {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-
-      if (MAZE[y][x] === "#") {
-        cell.classList.add("wall");
-      } else {
-        const visits = state.cellVisits[y][x];
-        if (visits > 0) {
-          cell.style.setProperty("--heat", (visits / maxVisit).toFixed(2));
-          cell.classList.add("visited");
-        }
-      }
-
-      if (state.player.x === x && state.player.y === y) {
-        cell.classList.add("player");
-        cell.textContent = "P";
-      }
-
-      if (state.npc.x === x && state.npc.y === y) {
-        cell.classList.add("npc");
-        cell.textContent = "N";
-      }
-
-      board.appendChild(cell);
-    }
-  }
-}
-
-function renderMetrics() {
-  roundStatus.textContent = state.active ? "Running" : state.lastMessage;
-  roundStatus.classList.toggle("running", state.active);
-  stepCount.textContent = state.steps;
-  roundLimit.textContent = ROUND_LIMIT;
-  memoryCount.textContent = countLearnedCells();
-  predictionScore.textContent = `${calculatePredictionBias()}%`;
-  baselineAverage.textContent = averageCaptureSteps("baseline");
-  learnedAverage.textContent = averageCaptureSteps("learned");
-  escapeRate.textContent = getEscapeRate();
-  modeNote.textContent =
-    state.mode === "baseline"
-      ? "Baseline uses BFS shortest path to the player's current position."
-      : "Learned scores moves with shortest path, heatmap memory, and local transition habits.";
-
-  modeButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.mode === state.mode);
-  });
-}
-
-function renderRoundLog() {
-  roundLog.innerHTML = "";
-  const recentRounds = state.roundResults.slice(-8).reverse();
-
-  if (!recentRounds.length) {
-    const empty = document.createElement("li");
-    empty.textContent = "No rounds yet.";
-    roundLog.appendChild(empty);
-    return;
-  }
-
-  recentRounds.forEach((result, index) => {
-    const item = document.createElement("li");
-    const roundNumber = state.roundResults.length - index;
-    item.textContent = `Round ${roundNumber}: ${result.mode}, ${result.outcome}, ${result.steps} steps`;
-    roundLog.appendChild(item);
-  });
-}
-
-function render() {
-  renderBoard();
-  renderMetrics();
-  renderRoundLog();
-}
-
-function handleKeydown(event) {
-  const keyMap = {
-    ArrowUp: "up",
-    w: "up",
-    W: "up",
-    ArrowRight: "right",
-    d: "right",
-    D: "right",
-    ArrowDown: "down",
-    s: "down",
-    S: "down",
-    ArrowLeft: "left",
-    a: "left",
-    A: "left",
-  };
-
-  const direction = keyMap[event.key];
-  if (!direction) {
-    return;
-  }
-  event.preventDefault();
-  movePlayer(direction);
-}
-
-startRoundButton.addEventListener("click", startRound);
-resetRoundButton.addEventListener("click", resetRound);
-clearLearningButton.addEventListener("click", clearLearning);
-modeButtons.forEach((button) => {
-  button.addEventListener("click", () => setMode(button.dataset.mode));
+  flap();
 });
-joystick.addEventListener("pointerdown", startJoystick);
-joystick.addEventListener("pointermove", updateJoystick);
-joystick.addEventListener("pointerup", stopJoystick);
-joystick.addEventListener("pointercancel", stopJoystick);
-document.addEventListener("keydown", handleKeydown);
+document.addEventListener("keydown", (event) => {
+  if (event.code === "Space") {
+    event.preventDefault();
+    flap();
+  }
+});
 
-render();
+resetGame();
+saveLogs();

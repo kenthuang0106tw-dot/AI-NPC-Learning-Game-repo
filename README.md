@@ -1,50 +1,108 @@
-# AI NPC Route Learning Science Fair Project
+# Flappy Skill Lab
 
-Research question: can an AI NPC learn a player's escape route and become better at chasing the player?
+This is a Flappy Bird-style web game for an elementary science fair experiment.
 
-This project is a browser-based maze experiment. The player escapes through a 15 x 11 maze while an NPC tries to catch them. The experiment compares two NPC strategies:
+The goal is not only to make a game. The goal is to collect clean player data so students can study:
 
-- Baseline: uses BFS shortest path to chase the player's current position.
-- Learned: uses shortest path plus learned route heat and movement transition memory.
+1. Why are strong players better?
+2. Can AI predict the player's next click in a future stage?
+3. How does game speed change human control?
 
-## Hypothesis
-
-If the NPC records which cells the player visits often and which direction the player tends to choose from each cell, then the learned NPC should catch the player in fewer steps than the baseline NPC.
+Stage 1 MVP includes the game, data collection, CSV export, and a game-over dashboard. It does not include AI prediction yet.
 
 ## How to Play
 
-Open `index.html` in a browser.
+Open `index.html` in a browser, or use the GitHub Pages link.
 
-1. Choose `Baseline` or `Learned`.
-2. Press `Start Round`.
-3. Move the player with WASD, arrow keys, or the on-screen mobile joystick.
-4. Try to survive for 60 steps.
-5. Compare the result metrics after several rounds.
+1. Choose a speed level: `Slow`, `Normal`, or `Fast`.
+2. Press `Start`.
+3. Press `Space`, click the mouse, or tap the phone screen to make the bird fly upward.
+4. Avoid the pipes and the ground.
+5. After game over, read the dashboard or export CSV.
 
-## Suggested Experiment
+The game is designed so a new player can understand it in less than 10 seconds.
 
-1. Run 5 baseline rounds and record the average capture steps.
-2. Run 10 learned rounds so the NPC can collect route memory.
-3. Run 5 more learned rounds and compare the average capture steps against baseline.
+## Data Collected
 
-Success is shown if the learned NPC lowers the average capture steps or lowers the player's escape success rate.
+Every frame records one row:
 
-## Learning Model
+- `game_id`
+- `time`
+- `frame`
+- `speed_level`
+- `bird_y`
+- `bird_vy`
+- `pipe_x`
+- `pipe_gap_center`
+- `pipe_gap_size`
+- `next_pipe_distance`
+- `score`
+- `is_click`
+- `is_dead`
+- `death_reason`
 
-The game stores:
+For click frames, the row also records:
 
-- `cellVisits[y][x]`: how often the player has visited each maze cell.
-- `transitionCounts[fromCell][direction]`: which direction the player usually chooses from a cell.
-- `roundResults[]`: mode, outcome, and steps for each round.
+- `click_interval`: seconds since the previous click
+- `error_to_center`: `bird_y - pipe_gap_center`
+- `next_pipe_distance`: how far away the next pipe was when the player clicked
 
-The learned NPC scores each possible next move using:
+All rows are saved in browser `localStorage`, so restarting the game does not delete old data.
 
-- shortest-path distance to the predicted player position,
-- player route heat from visited cells,
-- transition bias from nearby movement habits,
-- distance to the player's current position.
+## Export CSV
 
-No external AI API is used. The model is intentionally explainable for a science fair.
+Press `Export CSV` to download all historical game data from this browser.
+
+The CSV can be opened in Excel, Google Sheets, or Python.
+
+Press `Clear Data` only when you want to delete all saved experiment data.
+
+## Game Over Dashboard
+
+After each game, the dashboard shows:
+
+- survival time
+- score
+- average clicks per second
+- average height control error: `average(abs(error_to_center))`
+- death reason
+- bird height variation
+
+These metrics help compare different playing styles.
+
+## Research Questions
+
+### 1. Why are strong players better?
+
+Compare high-score and low-score games:
+
+- Are stronger players clicking less often?
+- Is their average height error smaller?
+- Is their bird height variation lower?
+- Do they click earlier before the next pipe?
+
+### 2. Can AI predict the player's next click?
+
+This MVP does not train AI yet.
+
+However, the exported frame data already includes player state and `is_click`, so a future AI model can try to predict whether the next frame will be a click.
+
+Useful features could include:
+
+- `bird_y`
+- `bird_vy`
+- `next_pipe_distance`
+- `pipe_gap_center`
+- `speed_level`
+
+### 3. How does speed affect human reaction?
+
+Compare the same player across `Slow`, `Normal`, and `Fast`:
+
+- Does click frequency increase?
+- Does height error get larger?
+- Does survival time drop?
+- Does death reason change?
 
 ## Project Structure
 
