@@ -209,10 +209,14 @@ h2 {
 }
 
 .controls,
+.mobile-pad,
 .mode-toggle {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.controls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .mode-toggle {
@@ -220,6 +224,7 @@ h2 {
 }
 
 .controls button,
+.mobile-pad button,
 .mode-toggle button {
   min-height: 46px;
   padding: 10px 12px;
@@ -233,11 +238,47 @@ h2 {
 }
 
 .controls button:hover,
+.mobile-pad button:hover,
 .mode-toggle button:hover,
 .mode-toggle button.active {
   transform: translateY(-2px);
   border-color: #eeb45e;
   background: #fff7e7;
+}
+
+.mobile-pad {
+  grid-template-columns: repeat(3, minmax(0, 72px));
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
+  justify-content: center;
+  margin: 10px 0 16px;
+}
+
+.mobile-pad button {
+  min-width: 60px;
+  min-height: 52px;
+  padding: 0;
+  font-size: 1.2rem;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.pad-up {
+  grid-area: up;
+}
+
+.pad-left {
+  grid-area: left;
+}
+
+.pad-right {
+  grid-area: right;
+}
+
+.pad-down {
+  grid-area: down;
 }
 
 .data-panel {
@@ -379,7 +420,16 @@ h2 {
   }
 
   .controls,
+  .mobile-pad,
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-pad {
+    grid-template-columns: repeat(3, minmax(58px, 72px));
+    grid-template-areas:
+      ". up ."
+      "left . right"
+      ". down .";
   }
 }

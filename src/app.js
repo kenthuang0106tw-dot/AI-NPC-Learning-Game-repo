@@ -42,6 +42,7 @@ const startRoundButton = document.querySelector("#startRoundButton");
 const resetRoundButton = document.querySelector("#resetRoundButton");
 const clearLearningButton = document.querySelector("#clearLearningButton");
 const modeButtons = document.querySelectorAll("[data-mode]");
+const moveButtons = document.querySelectorAll("[data-move]");
 const modeNote = document.querySelector("#modeNote");
 const stepCount = document.querySelector("#stepCount");
 const roundLimit = document.querySelector("#roundLimit");
@@ -463,6 +464,9 @@ resetRoundButton.addEventListener("click", resetRound);
 clearLearningButton.addEventListener("click", clearLearning);
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => setMode(button.dataset.mode));
+});
+moveButtons.forEach((button) => {
+  button.addEventListener("click", () => movePlayer(button.dataset.move));
 });
 document.addEventListener("keydown", handleKeydown);
 
