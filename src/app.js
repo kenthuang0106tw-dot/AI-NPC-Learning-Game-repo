@@ -2,6 +2,7 @@
 // This file intentionally keeps the game simple and readable for a science fair project.
 
 const STORAGE_KEY = "flappy_skill_lab_logs_v1";
+const PENDING_UPLOADS_KEY = "flappy_skill_lab_pending_uploads_v1";
 const PLAYER_COUNTS_KEY = "flappy_skill_lab_player_counts_v1";
 const PLAYER_PROFILES_KEY = "flappy_skill_lab_player_profiles_v1";
 const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
@@ -35,12 +36,6 @@ const SPEED_SETTINGS = {
   fast: { gravity: 0.52, flap: -8.4, pipeSpeed: 3.6 },
 };
 
-const SFX_ASSETS = {
-  flap: { src: "src/assets/sfx/flap.wav", volume: 0.95 },
-  score: { src: "src/assets/sfx/score.wav", volume: 1 },
-  hit: { src: "src/assets/sfx/hit.wav", volume: 1 },
-};
-
 const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
 const playerNameInput = document.querySelector("#playerNameInput");
@@ -48,7 +43,6 @@ const playerPlayCount = document.querySelector("#playerPlayCount");
 const startButton = document.querySelector("#startButton");
 const restartButton = document.querySelector("#restartButton");
 const exportButton = document.querySelector("#exportButton");
-const soundButton = document.querySelector("#soundButton");
 const clearButton = document.querySelector("#clearButton");
 const uploadEndpointInput = document.querySelector("#uploadEndpointInput");
 const saveEndpointButton = document.querySelector("#saveEndpointButton");
@@ -76,6 +70,7 @@ const analysisText = document.querySelector("#analysisText");
 const achievementList = document.querySelector("#achievementList");
 
 let allLogs = loadLogs();
+let pendingUploads = loadPendingUploads();
 let playerCounts = loadPlayerCounts();
 let playerProfiles = loadPlayerProfiles();
 let animationId = null;
@@ -83,8 +78,7 @@ let pendingClick = false;
 let currentGameLogs = [];
 let clickEvents = [];
 let passEffects = [];
-let audioUnlocked = false;
-let htmlAudioPools = {};
+let uploadInProgress = false;
 const deviceId = getDeviceId();
 
 const game = {
@@ -116,6 +110,18 @@ function loadLogs() {
   } catch {
     return [];
   }
+}
+
+function loadPendingUploads() {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_UPLOADS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingUploads() {
+  localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(pendingUploads));
 }
 
 function loadPlayerCounts() {
@@ -171,9 +177,10 @@ function saveLogs() {
 }
 
 function setUploadStatus(message) {
-  uploadStatus.textContent = message;
-  uploadStatusTop.textContent = `Upload: ${message}`;
-  uploadResult.textContent = message;
+  const pendingText = pendingUploads.length ? ` Pending: ${pendingUploads.length}.` : "";
+  uploadStatus.textContent = `${message}${pendingText}`;
+  uploadStatusTop.textContent = `Upload: ${message}${pendingText}`;
+  uploadResult.textContent = `${message}${pendingText}`;
 }
 
 function getPlayerName() {
@@ -262,7 +269,6 @@ function resetGame() {
 }
 
 function startGame() {
-  unlockAudio();
   if (!preparePlayerForGame()) {
     return;
   }
@@ -281,17 +287,7 @@ function restartGame() {
   startGame();
 }
 
-function enableSound() {
-  unlockAudio();
-  audioUnlocked = true;
-  soundButton.textContent = "Sound On";
-  gameStatus.textContent = "Game sounds are on. If silent, check phone silent mode and volume.";
-  playGameSound("score");
-  window.setTimeout(() => playGameSound("flap"), 140);
-}
-
 function startOrFlap() {
-  unlockAudio();
   if (!game.running) {
     startGame();
   }
@@ -303,7 +299,6 @@ function flap() {
     return;
   }
   pendingClick = true;
-  playGameSound("flap");
 }
 
 function update(now) {
@@ -390,7 +385,6 @@ function updateScore() {
       pipe.passed = true;
       game.score += 1;
       passEffects.push({ x: BIRD_X + 38, y: game.birdY, age: 0 });
-      playGameSound("score");
       checkAchievements();
     }
   }
@@ -433,105 +427,6 @@ function addAchievement(name) {
     profile.achievements.push(name);
     savePlayerProfiles();
   }
-}
-
-function unlockAudio() {
-  preloadSoundEffects();
-  audioUnlocked = true;
-  soundButton.textContent = "Sound On";
-}
-
-function preloadSoundEffects() {
-  for (const type of Object.keys(SFX_ASSETS)) {
-    getHtmlAudioPool(type);
-  }
-}
-
-function getHtmlAudioPool(type) {
-  if (!htmlAudioPools[type]) {
-    const asset = SFX_ASSETS[type];
-    const src = asset ? asset.src : createBeepWavDataUrl(type);
-    const volume = asset ? asset.volume : 1;
-    htmlAudioPools[type] = {
-      index: 0,
-      players: Array.from({ length: 4 }, () => {
-        const audio = new Audio(src);
-        audio.preload = "auto";
-        audio.volume = volume;
-        if (typeof audio.load === "function") {
-          audio.load();
-        }
-        return audio;
-      }),
-    };
-  }
-  return htmlAudioPools[type];
-}
-
-function playHtmlBeep(type) {
-  try {
-    const pool = getHtmlAudioPool(type);
-    const audio = pool.players[pool.index];
-    pool.index = (pool.index + 1) % pool.players.length;
-    audio.pause();
-    audio.currentTime = 0;
-    const result = audio.play();
-    if (result && typeof result.catch === "function") {
-      result.catch(() => {});
-    }
-  } catch {
-    // Fallback audio is optional.
-  }
-}
-
-function createBeepWavDataUrl(type) {
-  const sampleRate = 8000;
-  const sound = {
-    flap: { duration: 0.08, frequency: 620 },
-    score: { duration: 0.14, frequency: 880 },
-    hit: { duration: 0.24, frequency: 180 },
-  }[type] || { duration: 0.12, frequency: 660 };
-  const duration = sound.duration;
-  const frequency = sound.frequency;
-  const samples = Math.floor(sampleRate * duration);
-  const bytesPerSample = 2;
-  const dataSize = samples * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-  writeAscii(view, 0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeAscii(view, 8, "WAVE");
-  writeAscii(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * bytesPerSample, true);
-  view.setUint16(32, bytesPerSample, true);
-  view.setUint16(34, 16, true);
-  writeAscii(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-  for (let i = 0; i < samples; i += 1) {
-    const fade = 1 - i / samples;
-    const value = Math.sin((i / sampleRate) * frequency * Math.PI * 2) * fade * 0.65;
-    view.setInt16(44 + i * 2, value * 32767, true);
-  }
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return `data:audio/wav;base64,${btoa(binary)}`;
-}
-
-function writeAscii(view, offset, text) {
-  for (let i = 0; i < text.length; i += 1) {
-    view.setUint8(offset + i, text.charCodeAt(i));
-  }
-}
-
-function playGameSound(type) {
-  playHtmlBeep(type);
 }
 
 function getNextPipe() {
@@ -615,7 +510,6 @@ function endGame(elapsedSeconds) {
   saveLogs();
   showDashboard(elapsedSeconds);
   gameStatus.textContent = `Game over: ${game.deathReason}`;
-  playGameSound("hit");
   drawScene();
   uploadCompletedGame();
 }
@@ -1174,10 +1068,12 @@ function clearData() {
     return;
   }
   allLogs = [];
+  pendingUploads = [];
   playerCounts = {};
   playerProfiles = {};
   savePlayerCounts();
   savePlayerProfiles();
+  savePendingUploads();
   updatePlayerCountDisplay();
   saveLogs();
   gameStatus.textContent = "Saved data cleared.";
@@ -1211,37 +1107,88 @@ async function uploadCompletedGame() {
   }
 
   game.finalUploadRows = completedRows;
-  const chunkCount = Math.ceil(completedRows.length / UPLOAD_CHUNK_SIZE);
-  for (let attempt = 1; attempt <= COMPLETE_UPLOAD_ATTEMPTS; attempt += 1) {
-    for (let index = 0; index < completedRows.length; index += UPLOAD_CHUNK_SIZE) {
-      const chunk = completedRows.slice(index, index + UPLOAD_CHUNK_SIZE);
-      const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
-      const ok = await uploadRows(chunk, {
-        automatic: true,
-        silentWhenMissing: true,
-        statusMessage: `Sending round ${game.playerName} #${game.playerPlayCount}: try ${attempt}/${COMPLETE_UPLOAD_ATTEMPTS}, chunk ${chunkNumber}/${chunkCount}...`,
-        successMessage: `Round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${completedRows.length} rows.`,
-      });
-      if (!ok) {
-        return;
-      }
-    }
+  enqueuePendingUpload(completedRows);
+  await processPendingUploads();
+}
 
-    setUploadStatus(`Checking Sheet for ${game.playerName} #${game.playerPlayCount}...`);
-    const verified = await verifyGameDeathRow(game.gameId);
-    if (verified) {
-      setUploadStatus(`Sheet verified: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
-      if (game.over) {
-        gameStatus.textContent = `Game over: ${game.deathReason}. Sheet verified.`;
-      }
-      return;
-    }
+function enqueuePendingUpload(rows) {
+  const lastRow = rows[rows.length - 1];
+  pendingUploads = pendingUploads.filter((upload) => upload.gameId !== lastRow.game_id);
+  pendingUploads.push({
+    gameId: lastRow.game_id,
+    playerName: lastRow.player_name,
+    playerPlayCount: lastRow.player_play_count,
+    deathReason: lastRow.death_reason,
+    rows,
+    attempts: 0,
+    createdAt: new Date().toISOString(),
+  });
+  savePendingUploads();
+  setUploadStatus(`Saved round locally for verified upload: ${lastRow.player_name} #${lastRow.player_play_count}.`);
+}
+
+async function processPendingUploads() {
+  if (uploadInProgress || !pendingUploads.length) {
+    return;
   }
 
-  setUploadStatus(`Not verified in Sheet. Use Upload Backup, then check duplicates by game_id + frame.`);
-  if (game.over) {
-    gameStatus.textContent = `Game over: ${game.deathReason}. Upload not verified.`;
+  uploadInProgress = true;
+  try {
+    for (const pending of [...pendingUploads]) {
+      const verifiedBeforeUpload = await verifyGameDeathRow(pending.gameId);
+      if (verifiedBeforeUpload) {
+        removePendingUpload(pending.gameId);
+        continue;
+      }
+
+      const uploaded = await sendPendingUpload(pending);
+      if (!uploaded) {
+        continue;
+      }
+
+      setUploadStatus(`Checking Sheet for ${pending.playerName} #${pending.playerPlayCount}...`);
+      const verified = await verifyGameDeathRow(pending.gameId);
+      if (verified) {
+        removePendingUpload(pending.gameId);
+        setUploadStatus(`Sheet verified: ${pending.playerName} #${pending.playerPlayCount}, ${pending.rows.length} rows.`);
+        if (game.gameId === pending.gameId && game.over) {
+          gameStatus.textContent = `Game over: ${game.deathReason}. Sheet verified.`;
+        }
+      } else {
+        pending.attempts += 1;
+        savePendingUploads();
+        setUploadStatus(`Still not verified. Will retry automatically: ${pending.playerName} #${pending.playerPlayCount}.`);
+        if (game.gameId === pending.gameId && game.over) {
+          gameStatus.textContent = `Game over: ${game.deathReason}. Upload pending retry.`;
+        }
+      }
+    }
+  } finally {
+    uploadInProgress = false;
   }
+}
+
+async function sendPendingUpload(pending) {
+  const chunkCount = Math.ceil(pending.rows.length / UPLOAD_CHUNK_SIZE);
+  for (let index = 0; index < pending.rows.length; index += UPLOAD_CHUNK_SIZE) {
+    const chunk = pending.rows.slice(index, index + UPLOAD_CHUNK_SIZE);
+    const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
+    const ok = await uploadRows(chunk, {
+      automatic: true,
+      silentWhenMissing: true,
+      statusMessage: `Sending pending round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
+      successMessage: `Pending round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
+    });
+    if (!ok) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function removePendingUpload(gameId) {
+  pendingUploads = pendingUploads.filter((upload) => upload.gameId !== gameId);
+  savePendingUploads();
 }
 
 function buildUploadPayload(rowsToUpload) {
@@ -1363,6 +1310,14 @@ async function uploadRows(
 }
 
 async function uploadData() {
+  if (pendingUploads.length) {
+    await processPendingUploads();
+    if (pendingUploads.length) {
+      setUploadStatus(`Pending uploads still not verified: ${pendingUploads.length}. Keep this page open and try again.`);
+      return;
+    }
+  }
+
   if (!allLogs.length) {
     setUploadStatus("No saved rows to upload.");
     return;
@@ -1387,7 +1342,6 @@ async function uploadData() {
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", restartGame);
 exportButton.addEventListener("click", exportCsv);
-soundButton.addEventListener("click", enableSound);
 clearButton.addEventListener("click", clearData);
 saveEndpointButton.addEventListener("click", saveEndpoint);
 uploadButton.addEventListener("click", uploadData);
@@ -1410,3 +1364,4 @@ setUploadStatus("Ready. Completed games upload automatically.");
 updatePlayerCountDisplay();
 resetGame();
 saveLogs();
+processPendingUploads();

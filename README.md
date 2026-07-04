@@ -25,11 +25,9 @@ Player name is required each time the page is opened. During the same page sessi
 
 The game is designed so a new player can understand it in less than 10 seconds.
 
-Visual upgrades are feedback only. Background color changes, bird skins, sound effects, animations, and achievements do not change gravity, pipe speed, pipe gap, pipe distance, collision size, or jump force.
+Visual upgrades are feedback only. Background color changes, bird skins, animations, and achievements do not change gravity, pipe speed, pipe gap, pipe distance, collision size, or jump force.
 
 The dashboard also keeps each player's best score and unlocked achievements in browser `localStorage`.
-
-Sound effects use Kenney UI Audio, licensed CC0. The selected WAV files are stored in `src/assets/sfx/`.
 
 ## Data Collected
 
