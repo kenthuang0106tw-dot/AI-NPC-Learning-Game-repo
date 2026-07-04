@@ -7,6 +7,8 @@ const PLAYER_NAME_KEY = "flappy_skill_lab_player_name_v1";
 const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
 const UPLOAD_ENDPOINT_KEY = "flappy_skill_lab_upload_endpoint_v1";
 const UPLOADED_ROWS_KEY = "flappy_skill_lab_uploaded_rows_v1";
+const DEFAULT_UPLOAD_ENDPOINT =
+  "https://script.google.com/macros/s/AKfycby5bcHFz9A9uxOWVfgwbvsANwbBN9pdF5Hi8zXnOgmW8YsucEIjHCFfaf3IW4LK7NX61A/exec";
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 640;
 const BIRD_X = 120;
@@ -572,16 +574,25 @@ function clearData() {
 }
 
 function saveEndpoint() {
-  const endpoint = uploadEndpointInput.value.trim();
+  const endpoint = getUploadEndpoint();
   localStorage.setItem(UPLOAD_ENDPOINT_KEY, endpoint);
   localStorage.setItem(UPLOADED_ROWS_KEY, "0");
+  uploadEndpointInput.value = endpoint;
   uploadStatus.textContent = endpoint
     ? "Upload URL saved. Finished games will upload automatically."
     : "Upload URL cleared.";
 }
 
+function getUploadEndpoint() {
+  return (
+    uploadEndpointInput.value.trim() ||
+    localStorage.getItem(UPLOAD_ENDPOINT_KEY) ||
+    DEFAULT_UPLOAD_ENDPOINT
+  );
+}
+
 async function uploadData({ automatic = false, silentWhenMissing = false } = {}) {
-  const endpoint = uploadEndpointInput.value.trim();
+  const endpoint = getUploadEndpoint();
   if (!endpoint) {
     if (silentWhenMissing) {
       return;
@@ -648,7 +659,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 playerNameInput.value = localStorage.getItem(PLAYER_NAME_KEY) || "";
-uploadEndpointInput.value = localStorage.getItem(UPLOAD_ENDPOINT_KEY) || "";
+uploadEndpointInput.value = localStorage.getItem(UPLOAD_ENDPOINT_KEY) || DEFAULT_UPLOAD_ENDPOINT;
+uploadStatus.textContent = "Auto-upload is ready. Finished games upload automatically.";
 updatePlayerCountDisplay();
 resetGame();
 saveLogs();

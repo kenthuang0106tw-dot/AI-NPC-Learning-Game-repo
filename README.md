@@ -130,6 +130,8 @@ Each device can use the same upload URL, so all data goes into the same Google S
 
 `Upload Data` is still useful as a backup button. If the internet disconnects during auto-upload, the rows stay saved in the browser and can be uploaded later.
 
+For this project, the tested Web App URL is already filled into the game as the default upload endpoint. Players usually only need to open the game and play.
+
 ## Game Over Dashboard
 
 After each game, the dashboard shows:
