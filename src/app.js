@@ -9,6 +9,8 @@ const UPLOAD_ENDPOINT_KEY = "flappy_skill_lab_upload_endpoint_v1";
 const LAST_HEIGHT_VARIATION_KEY = "flappy_skill_lab_last_height_variation_v1";
 const DEFAULT_UPLOAD_ENDPOINT =
   "https://script.google.com/macros/s/AKfycby5bcHFz9A9uxOWVfgwbvsANwbBN9pdF5Hi8zXnOgmW8YsucEIjHCFfaf3IW4LK7NX61A/exec";
+const SHEET_ID = "12rOhOWkdhYeDcr_nz-Ao9NEJE7jrw_K_AEgJRwgruUY";
+const SHEET_NAME = "data";
 const USE_PROJECT_UPLOAD_ENDPOINT = true;
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 640;
@@ -23,6 +25,9 @@ const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 6;
 const UPLOAD_CHUNK_SIZE = 80;
+const COMPLETE_UPLOAD_ATTEMPTS = 3;
+const VERIFY_RETRIES = 5;
+const VERIFY_WAIT_MS = 1400;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -78,13 +83,8 @@ let pendingClick = false;
 let currentGameLogs = [];
 let clickEvents = [];
 let passEffects = [];
-let audioContext = null;
 let audioUnlocked = false;
-let htmlAudios = {};
-let htmlMusicAudio = null;
-let musicTimer = null;
-let musicStep = 0;
-let audioMaster = null;
+let htmlAudioPools = {};
 const deviceId = getDeviceId();
 
 const game = {
@@ -274,7 +274,6 @@ function startGame() {
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "Playing. Tap once to fly upward.";
   setUploadStatus("Ready. Full round uploads after game over.");
-  startBackgroundMusic();
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -286,8 +285,7 @@ function enableSound() {
   unlockAudio();
   audioUnlocked = true;
   soundButton.textContent = "Sound On";
-  gameStatus.textContent = "Music and game sounds are on. If silent, check phone silent mode and volume.";
-  startBackgroundMusic();
+  gameStatus.textContent = "Game sounds are on. If silent, check phone silent mode and volume.";
   playGameSound("score");
   window.setTimeout(() => playGameSound("flap"), 140);
 }
@@ -438,40 +436,44 @@ function addAchievement(name) {
 }
 
 function unlockAudio() {
-  try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      return;
-    }
-    if (!audioContext) {
-      audioContext = new AudioContextClass();
-    }
-    if (audioContext.state === "suspended") {
-      audioContext.resume();
-    }
-    getAudioMaster();
-    audioUnlocked = true;
-    soundButton.textContent = "Sound On";
-  } catch {
-    audioUnlocked = false;
+  preloadSoundEffects();
+  audioUnlocked = true;
+  soundButton.textContent = "Sound On";
+}
+
+function preloadSoundEffects() {
+  for (const type of Object.keys(SFX_ASSETS)) {
+    getHtmlAudioPool(type);
   }
 }
 
-function getHtmlAudio(type) {
-  if (!htmlAudios[type]) {
+function getHtmlAudioPool(type) {
+  if (!htmlAudioPools[type]) {
     const asset = SFX_ASSETS[type];
-    htmlAudios[type] = new Audio(asset ? asset.src : createBeepWavDataUrl(type));
-    htmlAudios[type].preload = "auto";
-    htmlAudios[type].volume = asset ? asset.volume : 1;
+    const src = asset ? asset.src : createBeepWavDataUrl(type);
+    const volume = asset ? asset.volume : 1;
+    htmlAudioPools[type] = {
+      index: 0,
+      players: Array.from({ length: 4 }, () => {
+        const audio = new Audio(src);
+        audio.preload = "auto";
+        audio.volume = volume;
+        if (typeof audio.load === "function") {
+          audio.load();
+        }
+        return audio;
+      }),
+    };
   }
-  return htmlAudios[type];
+  return htmlAudioPools[type];
 }
 
 function playHtmlBeep(type) {
   try {
-    const sourceAudio = getHtmlAudio(type);
-    const audio = typeof sourceAudio.cloneNode === "function" ? sourceAudio.cloneNode() : sourceAudio;
-    audio.volume = sourceAudio.volume;
+    const pool = getHtmlAudioPool(type);
+    const audio = pool.players[pool.index];
+    pool.index = (pool.index + 1) % pool.players.length;
+    audio.pause();
     audio.currentTime = 0;
     const result = audio.play();
     if (result && typeof result.catch === "function") {
@@ -522,69 +524,6 @@ function createBeepWavDataUrl(type) {
   return `data:audio/wav;base64,${btoa(binary)}`;
 }
 
-function createMusicLoopWavDataUrl() {
-  const sampleRate = 11025;
-  const duration = 8;
-  const channelCount = 2;
-  const bytesPerSample = 2;
-  const samples = Math.floor(sampleRate * duration);
-  const dataSize = samples * channelCount * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-  writeAscii(view, 0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeAscii(view, 8, "WAVE");
-  writeAscii(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channelCount, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channelCount * bytesPerSample, true);
-  view.setUint16(32, channelCount * bytesPerSample, true);
-  view.setUint16(34, 16, true);
-  writeAscii(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-
-  const melody = [659, 784, 880, 784, 659, 587, 659, 988];
-  const bass = [196, 220, 174, 196, 247, 220, 196, 220];
-  const beatLength = duration / melody.length;
-  for (let i = 0; i < samples; i += 1) {
-    const t = i / sampleRate;
-    const beat = Math.floor(t / beatLength) % melody.length;
-    const local = (t % beatLength) / beatLength;
-    const fadeIn = Math.min(1, local / 0.12);
-    const fadeOut = Math.min(1, (1 - local) / 0.18);
-    const envelope = Math.min(fadeIn, fadeOut);
-    const pulse = 0.82 + Math.sin(t * Math.PI * 4) * 0.08;
-    const lead = softTone(t, melody[beat]) * 0.24 * envelope;
-    const harmony = softTone(t, melody[beat] * 1.25) * 0.1 * envelope;
-    const low = softTone(t, bass[beat]) * 0.14 * pulse;
-    const bell = local < 0.42 ? softTone(t, melody[beat] * 2) * 0.08 * envelope : 0;
-    const left = (lead * 0.9 + harmony * 0.55 + low + bell * 0.35) * 0.72;
-    const right = (lead * 0.62 + harmony * 0.92 + low * 0.82 + bell) * 0.72;
-    const offset = 44 + i * channelCount * bytesPerSample;
-    view.setInt16(offset, clampSample(left), true);
-    view.setInt16(offset + 2, clampSample(right), true);
-  }
-
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return `data:audio/wav;base64,${btoa(binary)}`;
-}
-
-function softTone(time, frequency) {
-  const main = Math.sin(time * frequency * Math.PI * 2);
-  const overtone = Math.sin(time * frequency * Math.PI * 4) * 0.25;
-  return (main + overtone) / 1.25;
-}
-
-function clampSample(value) {
-  return Math.max(-1, Math.min(1, value)) * 32767;
-}
-
 function writeAscii(view, offset, text) {
   for (let i = 0; i < text.length; i += 1) {
     view.setUint8(offset + i, text.charCodeAt(i));
@@ -593,194 +532,6 @@ function writeAscii(view, offset, text) {
 
 function playGameSound(type) {
   playHtmlBeep(type);
-}
-
-function getAudioMaster() {
-  if (!audioContext) {
-    return null;
-  }
-  if (!audioMaster) {
-    audioMaster = audioContext.createGain();
-    audioMaster.gain.value = 0.72;
-    audioMaster.connect(audioContext.destination);
-  }
-  return audioMaster;
-}
-
-function connectSpatialNode(outputNode, panValue) {
-  const master = getAudioMaster();
-  if (!master) {
-    return null;
-  }
-  if (typeof audioContext.createStereoPanner === "function") {
-    const panner = audioContext.createStereoPanner();
-    panner.pan.value = panValue;
-    outputNode.connect(panner);
-    panner.connect(master);
-    return panner;
-  }
-  outputNode.connect(master);
-  return master;
-}
-
-function startBackgroundMusic() {
-  if (!audioUnlocked) {
-    return;
-  }
-
-  startHtmlBackgroundMusic();
-  if (!musicTimer && audioContext) {
-    playMusicStep();
-    musicTimer = window.setInterval(playMusicStep, 620);
-  }
-}
-
-function getHtmlMusicAudio() {
-  if (!htmlMusicAudio) {
-    htmlMusicAudio = new Audio(createMusicLoopWavDataUrl());
-    htmlMusicAudio.loop = true;
-    htmlMusicAudio.preload = "auto";
-    htmlMusicAudio.volume = 0.42;
-  }
-  return htmlMusicAudio;
-}
-
-function startHtmlBackgroundMusic() {
-  try {
-    const audio = getHtmlMusicAudio();
-    const result = audio.play();
-    if (result && typeof result.catch === "function") {
-      result.catch(() => {});
-    }
-  } catch {
-    // Music is optional feedback and should never interrupt the experiment.
-  }
-}
-
-function playMusicStep() {
-  try {
-    if (!audioContext || audioContext.state === "suspended") {
-      return;
-    }
-
-    const pattern = [
-      { chord: [392, 494, 587], melody: 784, pan: -0.22 },
-      { chord: [440, 523, 659], melody: 880, pan: 0.18 },
-      { chord: [349, 440, 523], melody: 698, pan: -0.12 },
-      { chord: [392, 494, 659], melody: 988, pan: 0.24 },
-      { chord: [330, 392, 494], melody: 659, pan: -0.18 },
-      { chord: [349, 440, 587], melody: 784, pan: 0.16 },
-      { chord: [392, 494, 587], melody: 740, pan: -0.08 },
-      { chord: [440, 523, 659], melody: 880, pan: 0.2 },
-    ];
-    const step = pattern[musicStep % pattern.length];
-    const now = audioContext.currentTime;
-    const outputGain = audioContext.createGain();
-    const filter = audioContext.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 1450;
-    filter.Q.value = 0.35;
-    outputGain.gain.setValueAtTime(0.0001, now);
-    outputGain.gain.exponentialRampToValueAtTime(0.026, now + 0.05);
-    outputGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
-    filter.connect(outputGain);
-    connectSpatialNode(outputGain, step.pan);
-
-    step.chord.forEach((frequency, index) => {
-      playMusicNote({
-        frequency,
-        startAt: now + index * 0.012,
-        duration: 0.68,
-        volume: 0.32,
-        destination: filter,
-        wave: "sine",
-      });
-    });
-    playMusicNote({
-      frequency: step.melody,
-      startAt: now + 0.08,
-      duration: 0.34,
-      volume: 0.22,
-      destination: filter,
-      wave: "triangle",
-    });
-    musicStep += 1;
-  } catch {
-    // Background music is optional and must never affect gameplay.
-  }
-}
-
-function playMusicNote({ frequency, startAt, duration, volume, destination, wave }) {
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-  oscillator.type = wave;
-  oscillator.frequency.setValueAtTime(frequency, startAt);
-  gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.04);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-  oscillator.connect(gain);
-  gain.connect(destination);
-  oscillator.start(startAt);
-  oscillator.stop(startAt + duration + 0.02);
-}
-
-function playPolishedSound(type) {
-  try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      return false;
-    }
-    if (!audioContext) {
-      audioContext = new AudioContextClass();
-    }
-    if (audioContext.state === "suspended") {
-      audioContext.resume();
-    }
-    getAudioMaster();
-    const sound = {
-      flap: { notes: [660, 990], duration: 0.16, volume: 0.11, pan: -0.28, wave: "triangle" },
-      score: { notes: [784, 988, 1319], duration: 0.32, volume: 0.1, pan: 0.32, wave: "sine" },
-      hit: { notes: [180, 92], duration: 0.42, volume: 0.12, pan: 0, wave: "triangle" },
-    }[type];
-    if (!sound) {
-      return false;
-    }
-
-    const now = audioContext.currentTime;
-    const outputGain = audioContext.createGain();
-    const filter = audioContext.createBiquadFilter();
-    filter.type = type === "hit" ? "lowpass" : "bandpass";
-    filter.frequency.value = type === "hit" ? 520 : 1500;
-    filter.Q.value = type === "hit" ? 0.8 : 0.45;
-    outputGain.gain.setValueAtTime(0.0001, now);
-    outputGain.gain.exponentialRampToValueAtTime(sound.volume, now + 0.018);
-    outputGain.gain.exponentialRampToValueAtTime(0.0001, now + sound.duration);
-    filter.connect(outputGain);
-    connectSpatialNode(outputGain, sound.pan);
-
-    sound.notes.forEach((frequency, index) => {
-      const oscillator = audioContext.createOscillator();
-      const noteGain = audioContext.createGain();
-      const startAt = now + index * 0.018;
-      oscillator.type = sound.wave;
-      oscillator.frequency.setValueAtTime(frequency, startAt);
-      if (type === "flap") {
-        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.18, startAt + sound.duration);
-      }
-      if (type === "hit") {
-        oscillator.frequency.exponentialRampToValueAtTime(Math.max(42, frequency * 0.45), startAt + sound.duration);
-      }
-      noteGain.gain.setValueAtTime(1 / sound.notes.length, startAt);
-      oscillator.connect(noteGain);
-      noteGain.connect(filter);
-      oscillator.start(startAt);
-      oscillator.stop(startAt + sound.duration + 0.02);
-    });
-    return true;
-  } catch {
-    // Audio is optional feedback and should never interrupt the experiment.
-    return false;
-  }
 }
 
 function getNextPipe() {
@@ -1461,23 +1212,35 @@ async function uploadCompletedGame() {
 
   game.finalUploadRows = completedRows;
   const chunkCount = Math.ceil(completedRows.length / UPLOAD_CHUNK_SIZE);
-  for (let index = 0; index < completedRows.length; index += UPLOAD_CHUNK_SIZE) {
-    const chunk = completedRows.slice(index, index + UPLOAD_CHUNK_SIZE);
-    const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
-    const ok = await uploadRows(chunk, {
-      automatic: true,
-      silentWhenMissing: true,
-      statusMessage: `Sending complete round ${game.playerName} #${game.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
-      successMessage: `Complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${completedRows.length} rows.`,
-    });
-    if (!ok) {
+  for (let attempt = 1; attempt <= COMPLETE_UPLOAD_ATTEMPTS; attempt += 1) {
+    for (let index = 0; index < completedRows.length; index += UPLOAD_CHUNK_SIZE) {
+      const chunk = completedRows.slice(index, index + UPLOAD_CHUNK_SIZE);
+      const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
+      const ok = await uploadRows(chunk, {
+        automatic: true,
+        silentWhenMissing: true,
+        statusMessage: `Sending round ${game.playerName} #${game.playerPlayCount}: try ${attempt}/${COMPLETE_UPLOAD_ATTEMPTS}, chunk ${chunkNumber}/${chunkCount}...`,
+        successMessage: `Round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${completedRows.length} rows.`,
+      });
+      if (!ok) {
+        return;
+      }
+    }
+
+    setUploadStatus(`Checking Sheet for ${game.playerName} #${game.playerPlayCount}...`);
+    const verified = await verifyGameDeathRow(game.gameId);
+    if (verified) {
+      setUploadStatus(`Sheet verified: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
+      if (game.over) {
+        gameStatus.textContent = `Game over: ${game.deathReason}. Sheet verified.`;
+      }
       return;
     }
   }
 
-  setUploadStatus(`Complete round sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, ${chunkCount} chunk(s).`);
+  setUploadStatus(`Not verified in Sheet. Use Upload Backup, then check duplicates by game_id + frame.`);
   if (game.over) {
-    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round sent.`;
+    gameStatus.textContent = `Game over: ${game.deathReason}. Upload not verified.`;
   }
 }
 
@@ -1487,6 +1250,57 @@ function buildUploadPayload(rowsToUpload) {
     uploaded_at: new Date().toISOString(),
     rows: rowsToUpload,
   };
+}
+
+async function verifyGameDeathRow(gameId) {
+  for (let attempt = 1; attempt <= VERIFY_RETRIES; attempt += 1) {
+    const found = await querySheetForDeathRow(gameId);
+    if (found) {
+      return true;
+    }
+    await wait(VERIFY_WAIT_MS);
+  }
+  return false;
+}
+
+function querySheetForDeathRow(gameId) {
+  return new Promise((resolve) => {
+    const callbackName = `flappySheetVerify_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const query = `select A,Q,R where A = '${String(gameId).replaceAll("'", "\\'")}' and Q = 1 limit 1`;
+    const script = document.createElement("script");
+    const cleanup = () => {
+      delete window[callbackName];
+      script.remove();
+    };
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve(false);
+    }, 5000);
+
+    window[callbackName] = (response) => {
+      window.clearTimeout(timeoutId);
+      const rows = response?.table?.rows || [];
+      cleanup();
+      resolve(rows.length > 0);
+    };
+
+    script.onerror = () => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      resolve(false);
+    };
+    script.src =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+      `?sheet=${encodeURIComponent(SHEET_NAME)}` +
+      `&tqx=responseHandler:${callbackName}` +
+      `&tq=${encodeURIComponent(query)}` +
+      `&cachebust=${Date.now()}`;
+    document.head.appendChild(script);
+  });
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 async function uploadRows(
