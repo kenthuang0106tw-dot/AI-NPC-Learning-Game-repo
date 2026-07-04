@@ -29,6 +29,8 @@ Visual upgrades are feedback only. Background color changes, bird skins, sound e
 
 The dashboard also keeps each player's best score and unlocked achievements in browser `localStorage`.
 
+Sound effects use Kenney UI Audio, licensed CC0. The selected WAV files are stored in `src/assets/sfx/`.
+
 ## Data Collected
 
 To keep the Google Sheet small, the game records one row every 5 frames. Click frames and death frames are always recorded, even if they are not on a 5-frame sample.

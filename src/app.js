@@ -30,6 +30,12 @@ const SPEED_SETTINGS = {
   fast: { gravity: 0.52, flap: -8.4, pipeSpeed: 3.6 },
 };
 
+const SFX_ASSETS = {
+  flap: { src: "src/assets/sfx/flap.wav", volume: 0.95 },
+  score: { src: "src/assets/sfx/score.wav", volume: 1 },
+  hit: { src: "src/assets/sfx/hit.wav", volume: 1 },
+};
+
 const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
 const playerNameInput = document.querySelector("#playerNameInput");
@@ -453,9 +459,10 @@ function unlockAudio() {
 
 function getHtmlAudio(type) {
   if (!htmlAudios[type]) {
-    htmlAudios[type] = new Audio(createBeepWavDataUrl(type));
+    const asset = SFX_ASSETS[type];
+    htmlAudios[type] = new Audio(asset ? asset.src : createBeepWavDataUrl(type));
     htmlAudios[type].preload = "auto";
-    htmlAudios[type].volume = 1;
+    htmlAudios[type].volume = asset ? asset.volume : 1;
   }
   return htmlAudios[type];
 }
@@ -585,9 +592,7 @@ function writeAscii(view, offset, text) {
 }
 
 function playGameSound(type) {
-  if (!playPolishedSound(type)) {
-    playHtmlBeep(type);
-  }
+  playHtmlBeep(type);
 }
 
 function getAudioMaster() {
