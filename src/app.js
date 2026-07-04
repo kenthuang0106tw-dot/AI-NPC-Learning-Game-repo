@@ -71,6 +71,9 @@ let passEffects = [];
 let audioContext = null;
 let audioUnlocked = false;
 let htmlAudios = {};
+let musicTimer = null;
+let musicStep = 0;
+let audioMaster = null;
 const deviceId = getDeviceId();
 
 const game = {
@@ -227,6 +230,7 @@ function startGame() {
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "Playing. Tap once to fly upward.";
   setUploadStatus("Ready. Full round uploads after game over.");
+  startBackgroundMusic();
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -238,7 +242,8 @@ function enableSound() {
   unlockAudio();
   audioUnlocked = true;
   soundButton.textContent = "Sound On";
-  gameStatus.textContent = "Sound test played. If silent, check phone silent mode and volume.";
+  gameStatus.textContent = "Music and game sounds are on. If silent, check phone silent mode and volume.";
+  startBackgroundMusic();
   playGameSound("score");
   window.setTimeout(() => playGameSound("flap"), 140);
 }
@@ -380,6 +385,7 @@ function unlockAudio() {
     if (audioContext.state === "suspended") {
       audioContext.resume();
     }
+    getAudioMaster();
     audioUnlocked = true;
     soundButton.textContent = "Sound On";
   } catch {
@@ -458,15 +464,120 @@ function writeAscii(view, offset, text) {
 }
 
 function playGameSound(type) {
-  playTone(type);
-  playHtmlBeep(type);
+  if (!playPolishedSound(type)) {
+    playHtmlBeep(type);
+  }
 }
 
-function playTone(type) {
+function getAudioMaster() {
+  if (!audioContext) {
+    return null;
+  }
+  if (!audioMaster) {
+    audioMaster = audioContext.createGain();
+    audioMaster.gain.value = 0.72;
+    audioMaster.connect(audioContext.destination);
+  }
+  return audioMaster;
+}
+
+function connectSpatialNode(outputNode, panValue) {
+  const master = getAudioMaster();
+  if (!master) {
+    return null;
+  }
+  if (typeof audioContext.createStereoPanner === "function") {
+    const panner = audioContext.createStereoPanner();
+    panner.pan.value = panValue;
+    outputNode.connect(panner);
+    panner.connect(master);
+    return panner;
+  }
+  outputNode.connect(master);
+  return master;
+}
+
+function startBackgroundMusic() {
+  if (musicTimer || !audioUnlocked || !audioContext) {
+    return;
+  }
+
+  playMusicStep();
+  musicTimer = window.setInterval(playMusicStep, 620);
+}
+
+function playMusicStep() {
+  try {
+    if (!audioContext || audioContext.state === "suspended") {
+      return;
+    }
+
+    const pattern = [
+      { chord: [392, 494, 587], melody: 784, pan: -0.22 },
+      { chord: [440, 523, 659], melody: 880, pan: 0.18 },
+      { chord: [349, 440, 523], melody: 698, pan: -0.12 },
+      { chord: [392, 494, 659], melody: 988, pan: 0.24 },
+      { chord: [330, 392, 494], melody: 659, pan: -0.18 },
+      { chord: [349, 440, 587], melody: 784, pan: 0.16 },
+      { chord: [392, 494, 587], melody: 740, pan: -0.08 },
+      { chord: [440, 523, 659], melody: 880, pan: 0.2 },
+    ];
+    const step = pattern[musicStep % pattern.length];
+    const now = audioContext.currentTime;
+    const outputGain = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1450;
+    filter.Q.value = 0.35;
+    outputGain.gain.setValueAtTime(0.0001, now);
+    outputGain.gain.exponentialRampToValueAtTime(0.026, now + 0.05);
+    outputGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+    filter.connect(outputGain);
+    connectSpatialNode(outputGain, step.pan);
+
+    step.chord.forEach((frequency, index) => {
+      playMusicNote({
+        frequency,
+        startAt: now + index * 0.012,
+        duration: 0.68,
+        volume: 0.32,
+        destination: filter,
+        wave: "sine",
+      });
+    });
+    playMusicNote({
+      frequency: step.melody,
+      startAt: now + 0.08,
+      duration: 0.34,
+      volume: 0.22,
+      destination: filter,
+      wave: "triangle",
+    });
+    musicStep += 1;
+  } catch {
+    // Background music is optional and must never affect gameplay.
+  }
+}
+
+function playMusicNote({ frequency, startAt, duration, volume, destination, wave }) {
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  oscillator.type = wave;
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+  oscillator.connect(gain);
+  gain.connect(destination);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + duration + 0.02);
+}
+
+function playPolishedSound(type) {
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
-      return;
+      return false;
     }
     if (!audioContext) {
       audioContext = new AudioContextClass();
@@ -474,34 +585,50 @@ function playTone(type) {
     if (audioContext.state === "suspended") {
       audioContext.resume();
     }
-    if (!audioUnlocked && type !== "hit") {
-      audioUnlocked = true;
-    }
-    const now = audioContext.currentTime;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    const tone = {
-      flap: { frequency: 620, duration: 0.08, volume: 0.12, type: "sine" },
-      score: { frequency: 880, duration: 0.14, volume: 0.14, type: "triangle" },
-      hit: { frequency: 180, duration: 0.22, volume: 0.16, type: "sawtooth" },
+    getAudioMaster();
+    const sound = {
+      flap: { notes: [660, 990], duration: 0.16, volume: 0.11, pan: -0.28, wave: "triangle" },
+      score: { notes: [784, 988, 1319], duration: 0.32, volume: 0.1, pan: 0.32, wave: "sine" },
+      hit: { notes: [180, 92], duration: 0.42, volume: 0.12, pan: 0, wave: "triangle" },
     }[type];
-    if (!tone) {
-      return;
+    if (!sound) {
+      return false;
     }
 
-    oscillator.type = tone.type;
-    oscillator.frequency.setValueAtTime(tone.frequency, now);
-    if (type === "hit") {
-      oscillator.frequency.exponentialRampToValueAtTime(55, now + tone.duration);
-    }
-    gain.gain.setValueAtTime(tone.volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + tone.duration);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(now);
-    oscillator.stop(now + tone.duration);
+    const now = audioContext.currentTime;
+    const outputGain = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+    filter.type = type === "hit" ? "lowpass" : "bandpass";
+    filter.frequency.value = type === "hit" ? 520 : 1500;
+    filter.Q.value = type === "hit" ? 0.8 : 0.45;
+    outputGain.gain.setValueAtTime(0.0001, now);
+    outputGain.gain.exponentialRampToValueAtTime(sound.volume, now + 0.018);
+    outputGain.gain.exponentialRampToValueAtTime(0.0001, now + sound.duration);
+    filter.connect(outputGain);
+    connectSpatialNode(outputGain, sound.pan);
+
+    sound.notes.forEach((frequency, index) => {
+      const oscillator = audioContext.createOscillator();
+      const noteGain = audioContext.createGain();
+      const startAt = now + index * 0.018;
+      oscillator.type = sound.wave;
+      oscillator.frequency.setValueAtTime(frequency, startAt);
+      if (type === "flap") {
+        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.18, startAt + sound.duration);
+      }
+      if (type === "hit") {
+        oscillator.frequency.exponentialRampToValueAtTime(Math.max(42, frequency * 0.45), startAt + sound.duration);
+      }
+      noteGain.gain.setValueAtTime(1 / sound.notes.length, startAt);
+      oscillator.connect(noteGain);
+      noteGain.connect(filter);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + sound.duration + 0.02);
+    });
+    return true;
   } catch {
     // Audio is optional feedback and should never interrupt the experiment.
+    return false;
   }
 }
 
