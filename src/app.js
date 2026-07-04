@@ -29,6 +29,7 @@ const UPLOAD_CHUNK_SIZE = 80;
 const COMPLETE_UPLOAD_ATTEMPTS = 3;
 const VERIFY_RETRIES = 5;
 const VERIFY_WAIT_MS = 1400;
+const FORM_POST_WAIT_MS = 2500;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -1284,7 +1285,7 @@ async function uploadRows(
     : `Uploading ${rowsToUpload.length} rows...`);
   setUploadStatus(uploadingMessage);
   try {
-    // no-cors keeps this simple for Google Apps Script web apps used by students.
+    await postPayloadWithHiddenForm(endpoint, body);
     await fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
@@ -1307,6 +1308,46 @@ async function uploadRows(
     );
     return false;
   }
+}
+
+function postPayloadWithHiddenForm(endpoint, payloadBody) {
+  return new Promise((resolve) => {
+    try {
+      const frameName = `upload_frame_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const iframe = document.createElement("iframe");
+      const form = document.createElement("form");
+      const payloadInput = document.createElement("textarea");
+      let done = false;
+      const finish = (ok) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        window.setTimeout(() => {
+          iframe.remove();
+          form.remove();
+        }, 0);
+        resolve(ok);
+      };
+
+      iframe.name = frameName;
+      iframe.style.display = "none";
+      form.style.display = "none";
+      form.method = "POST";
+      form.action = endpoint;
+      form.target = frameName;
+      payloadInput.name = "payload";
+      payloadInput.value = payloadBody;
+      form.appendChild(payloadInput);
+      document.body.appendChild(iframe);
+      document.body.appendChild(form);
+      iframe.addEventListener("load", () => finish(true), { once: true });
+      window.setTimeout(() => finish(false), FORM_POST_WAIT_MS);
+      form.submit();
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 async function uploadData() {

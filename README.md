@@ -114,8 +114,15 @@ const HEADERS = [
   "bird_skin_level",
 ];
 
+function parsePayload(e) {
+  if (e.parameter && e.parameter.payload) {
+    return JSON.parse(e.parameter.payload);
+  }
+  return JSON.parse(e.postData.contents);
+}
+
 function doPost(e) {
-  const payload = JSON.parse(e.postData.contents);
+  const payload = parsePayload(e);
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME)
     || SpreadsheetApp.openById(SHEET_ID).insertSheet(SHEET_NAME);
 
@@ -123,7 +130,16 @@ function doPost(e) {
     sheet.appendRow(HEADERS);
   }
 
-  const rows = (payload.rows || []).map((row) => HEADERS.map((header) => row[header] ?? ""));
+  const existingKeys = new Set();
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const existing = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    existing.forEach((row) => existingKeys.add(`${row[0]}|${row[5]}`));
+  }
+
+  const rows = (payload.rows || [])
+    .filter((row) => !existingKeys.has(`${row.game_id}|${row.frame}`))
+    .map((row) => HEADERS.map((header) => row[header] ?? ""));
   if (rows.length > 0) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
   }
