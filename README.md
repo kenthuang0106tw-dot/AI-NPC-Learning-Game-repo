@@ -135,11 +135,11 @@ function doPost(e) {
 6. Set `Who has access` to `Anyone`.
 7. Copy the Web App URL.
 8. Paste that URL into the game's `Upload Endpoint` box and press `Save URL`.
-9. After that, each completed game uploads automatically after death. The death row uploads first and again after the round data, so the latest Sheet row shows the death reason.
+9. After that, each completed game uploads automatically after death as one complete round. The final row in that round contains `is_dead = 1` and the `death_reason`.
 
 Each device can use the same upload URL, so all data goes into the same Google Sheet.
 
-`Upload Data` is still useful as a backup button. If the internet disconnects during auto-upload, the rows stay saved in the browser and can be uploaded later.
+`Upload Backup` is still useful as a backup button. It resends all rows saved in the browser, so the Sheet may contain duplicates. During analysis, remove duplicates by comparing `game_id` and `frame`.
 
 For this project, the tested Web App URL is already filled into the game as the default upload endpoint. Players usually only need to open the game and play.
 
