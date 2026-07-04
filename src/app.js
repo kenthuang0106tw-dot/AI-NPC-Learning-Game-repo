@@ -3,6 +3,7 @@
 
 const STORAGE_KEY = "flappy_skill_lab_logs_v1";
 const PLAYER_COUNTS_KEY = "flappy_skill_lab_player_counts_v1";
+const PLAYER_PROFILES_KEY = "flappy_skill_lab_player_profiles_v1";
 const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
 const UPLOAD_ENDPOINT_KEY = "flappy_skill_lab_upload_endpoint_v1";
 const LAST_HEIGHT_VARIATION_KEY = "flappy_skill_lab_last_height_variation_v1";
@@ -20,8 +21,9 @@ const PIPE_SPACING = 260;
 const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
-const MAX_BIRD_SKIN_LEVEL = 3;
+const MAX_BIRD_SKIN_LEVEL = 6;
 const UPLOAD_CHUNK_SIZE = 120;
+const BEACON_MAX_BYTES = 60000;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -57,12 +59,15 @@ const averageError = document.querySelector("#averageError");
 const deathReason = document.querySelector("#deathReason");
 const heightVariation = document.querySelector("#heightVariation");
 const uploadResult = document.querySelector("#uploadResult");
+const bestScore = document.querySelector("#bestScore");
+const achievementCount = document.querySelector("#achievementCount");
 const encouragementText = document.querySelector("#encouragementText");
 const analysisText = document.querySelector("#analysisText");
 const achievementList = document.querySelector("#achievementList");
 
 let allLogs = loadLogs();
 let playerCounts = loadPlayerCounts();
+let playerProfiles = loadPlayerProfiles();
 let animationId = null;
 let pendingClick = false;
 let currentGameLogs = [];
@@ -71,6 +76,7 @@ let passEffects = [];
 let audioContext = null;
 let audioUnlocked = false;
 let htmlAudios = {};
+let htmlMusicAudio = null;
 let musicTimer = null;
 let musicStep = 0;
 let audioMaster = null;
@@ -115,8 +121,34 @@ function loadPlayerCounts() {
   }
 }
 
+function loadPlayerProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(PLAYER_PROFILES_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
 function savePlayerCounts() {
   localStorage.setItem(PLAYER_COUNTS_KEY, JSON.stringify(playerCounts));
+}
+
+function savePlayerProfiles() {
+  localStorage.setItem(PLAYER_PROFILES_KEY, JSON.stringify(playerProfiles));
+}
+
+function getPlayerProfile(name) {
+  if (!name) {
+    return { bestScore: 0, achievements: [], speedsPlayed: [] };
+  }
+  if (!playerProfiles[name]) {
+    playerProfiles[name] = { bestScore: 0, achievements: [], speedsPlayed: [] };
+  }
+  const profile = playerProfiles[name];
+  profile.bestScore = Number(profile.bestScore) || 0;
+  profile.achievements = Array.isArray(profile.achievements) ? profile.achievements : [];
+  profile.speedsPlayed = Array.isArray(profile.speedsPlayed) ? profile.speedsPlayed : [];
+  return profile;
 }
 
 function getDeviceId() {
@@ -146,6 +178,13 @@ function getPlayerName() {
 function updatePlayerCountDisplay() {
   const name = getPlayerName();
   playerPlayCount.textContent = name ? playerCounts[name] || 0 : 0;
+  const profile = getPlayerProfile(name);
+  if (bestScore) {
+    bestScore.textContent = name ? profile.bestScore : "--";
+  }
+  if (achievementCount) {
+    achievementCount.textContent = name ? profile.achievements.length : "--";
+  }
 }
 
 function preparePlayerForGame() {
@@ -362,14 +401,34 @@ function checkAchievements() {
   if (game.score >= 1) {
     addAchievement("First Flight");
   }
+  if (game.score >= 10) {
+    addAchievement("Pipe Reader");
+  }
+  if (game.score >= 30) {
+    addAchievement("Calm Pilot");
+  }
   if (game.score >= 50) {
     addAchievement("Expert");
+  }
+  if (game.score >= 90) {
+    addAchievement("Night Flyer");
+  }
+  if (game.score >= 120) {
+    addAchievement("Sky Master");
+  }
+  if (game.score >= 150) {
+    addAchievement("Legend");
   }
 }
 
 function addAchievement(name) {
   if (!game.achievements.includes(name)) {
     game.achievements.push(name);
+  }
+  const profile = getPlayerProfile(game.playerName);
+  if (game.playerName && !profile.achievements.includes(name)) {
+    profile.achievements.push(name);
+    savePlayerProfiles();
   }
 }
 
@@ -457,6 +516,69 @@ function createBeepWavDataUrl(type) {
   return `data:audio/wav;base64,${btoa(binary)}`;
 }
 
+function createMusicLoopWavDataUrl() {
+  const sampleRate = 11025;
+  const duration = 8;
+  const channelCount = 2;
+  const bytesPerSample = 2;
+  const samples = Math.floor(sampleRate * duration);
+  const dataSize = samples * channelCount * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channelCount, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * channelCount * bytesPerSample, true);
+  view.setUint16(32, channelCount * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const melody = [659, 784, 880, 784, 659, 587, 659, 988];
+  const bass = [196, 220, 174, 196, 247, 220, 196, 220];
+  const beatLength = duration / melody.length;
+  for (let i = 0; i < samples; i += 1) {
+    const t = i / sampleRate;
+    const beat = Math.floor(t / beatLength) % melody.length;
+    const local = (t % beatLength) / beatLength;
+    const fadeIn = Math.min(1, local / 0.12);
+    const fadeOut = Math.min(1, (1 - local) / 0.18);
+    const envelope = Math.min(fadeIn, fadeOut);
+    const pulse = 0.82 + Math.sin(t * Math.PI * 4) * 0.08;
+    const lead = softTone(t, melody[beat]) * 0.24 * envelope;
+    const harmony = softTone(t, melody[beat] * 1.25) * 0.1 * envelope;
+    const low = softTone(t, bass[beat]) * 0.14 * pulse;
+    const bell = local < 0.42 ? softTone(t, melody[beat] * 2) * 0.08 * envelope : 0;
+    const left = (lead * 0.9 + harmony * 0.55 + low + bell * 0.35) * 0.72;
+    const right = (lead * 0.62 + harmony * 0.92 + low * 0.82 + bell) * 0.72;
+    const offset = 44 + i * channelCount * bytesPerSample;
+    view.setInt16(offset, clampSample(left), true);
+    view.setInt16(offset + 2, clampSample(right), true);
+  }
+
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return `data:audio/wav;base64,${btoa(binary)}`;
+}
+
+function softTone(time, frequency) {
+  const main = Math.sin(time * frequency * Math.PI * 2);
+  const overtone = Math.sin(time * frequency * Math.PI * 4) * 0.25;
+  return (main + overtone) / 1.25;
+}
+
+function clampSample(value) {
+  return Math.max(-1, Math.min(1, value)) * 32767;
+}
+
 function writeAscii(view, offset, text) {
   for (let i = 0; i < text.length; i += 1) {
     view.setUint8(offset + i, text.charCodeAt(i));
@@ -498,12 +620,37 @@ function connectSpatialNode(outputNode, panValue) {
 }
 
 function startBackgroundMusic() {
-  if (musicTimer || !audioUnlocked || !audioContext) {
+  if (!audioUnlocked) {
     return;
   }
 
-  playMusicStep();
-  musicTimer = window.setInterval(playMusicStep, 620);
+  startHtmlBackgroundMusic();
+  if (!musicTimer && audioContext) {
+    playMusicStep();
+    musicTimer = window.setInterval(playMusicStep, 620);
+  }
+}
+
+function getHtmlMusicAudio() {
+  if (!htmlMusicAudio) {
+    htmlMusicAudio = new Audio(createMusicLoopWavDataUrl());
+    htmlMusicAudio.loop = true;
+    htmlMusicAudio.preload = "auto";
+    htmlMusicAudio.volume = 0.42;
+  }
+  return htmlMusicAudio;
+}
+
+function startHtmlBackgroundMusic() {
+  try {
+    const audio = getHtmlMusicAudio();
+    const result = audio.play();
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch {
+    // Music is optional feedback and should never interrupt the experiment.
+  }
 }
 
 function playMusicStep() {
@@ -738,6 +885,8 @@ function ensureDeathFrameLogged(elapsedSeconds) {
 function resetDashboard() {
   survivalTime.textContent = "--";
   finalScore.textContent = "--";
+  bestScore.textContent = getPlayerName() ? getPlayerProfile(getPlayerName()).bestScore : "--";
+  achievementCount.textContent = getPlayerName() ? getPlayerProfile(getPlayerName()).achievements.length : "--";
   clicksPerSecond.textContent = "--";
   averageError.textContent = "--";
   deathReason.textContent = "--";
@@ -760,9 +909,13 @@ function showDashboard(elapsedSeconds) {
   if (elapsedSeconds >= 12 && heightStd !== null && heightStd <= 85) {
     addAchievement("Stable Pilot");
   }
+  updatePlayerProgress({ heightStd });
 
   survivalTime.textContent = `${elapsedSeconds.toFixed(2)}s`;
   finalScore.textContent = game.score;
+  const profile = getPlayerProfile(game.playerName);
+  bestScore.textContent = profile.bestScore;
+  achievementCount.textContent = profile.achievements.length;
   clicksPerSecond.textContent = clicksPerSecondValue.toFixed(2);
   averageError.textContent = absErrors.length ? average(absErrors).toFixed(2) : "--";
   deathReason.textContent = game.deathReason;
@@ -773,6 +926,35 @@ function showDashboard(elapsedSeconds) {
   if (heightStd !== null) {
     localStorage.setItem(LAST_HEIGHT_VARIATION_KEY, String(heightStd));
   }
+}
+
+function updatePlayerProgress({ heightStd }) {
+  const profile = getPlayerProfile(game.playerName);
+  if (!game.playerName) {
+    return;
+  }
+
+  if (!profile.speedsPlayed.includes(game.speedLevel)) {
+    profile.speedsPlayed.push(game.speedLevel);
+  }
+  if (game.score > profile.bestScore) {
+    profile.bestScore = game.score;
+    addAchievement("Personal Best");
+  }
+  if (game.playerPlayCount >= 5) {
+    addAchievement("Practice 5");
+  }
+  if (game.playerPlayCount >= 20) {
+    addAchievement("Practice 20");
+  }
+  if (profile.speedsPlayed.length >= 3) {
+    addAchievement("Speed Explorer");
+  }
+  if (heightStd !== null && heightStd <= 65 && game.score >= 5) {
+    addAchievement("Steady Wing");
+  }
+  savePlayerProfiles();
+  updatePlayerCountDisplay();
 }
 
 function getEncouragement() {
@@ -817,9 +999,17 @@ function getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd }) {
 
 function renderAchievements() {
   achievementList.innerHTML = "";
-  for (const achievement of game.achievements) {
+  const profile = getPlayerProfile(game.playerName);
+  if (!profile.achievements.length) {
     const item = document.createElement("li");
-    item.textContent = achievement;
+    item.textContent = "No achievements yet";
+    achievementList.appendChild(item);
+    return;
+  }
+
+  for (const achievement of profile.achievements) {
+    const item = document.createElement("li");
+    item.textContent = game.achievements.includes(achievement) ? `${achievement} (new)` : achievement;
     achievementList.appendChild(item);
   }
 }
@@ -861,25 +1051,106 @@ function drawBackground() {
 
   if (style.stars) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.86)";
-    for (let i = 0; i < 22; i += 1) {
+    for (let i = 0; i < style.starCount; i += 1) {
       const x = (i * 83 + 31) % CANVAS_WIDTH;
       const y = 32 + ((i * 47) % 210);
       ctx.fillRect(x, y, i % 3 === 0 ? 3 : 2, i % 3 === 0 ? 3 : 2);
+    }
+    if (style.moon) {
+      ctx.fillStyle = "rgba(255, 255, 230, 0.9)";
+      ctx.beginPath();
+      ctx.arc(392, 78, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = style.skyTop;
+      ctx.beginPath();
+      ctx.arc(402, 70, 22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (style.meteors) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.58)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i += 1) {
+        const x = 90 + i * 90;
+        const y = 70 + ((i * 37) % 110);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 34, y - 18);
+        ctx.stroke();
+      }
+    }
+    if (style.aurora) {
+      ctx.strokeStyle = "rgba(94, 234, 212, 0.42)";
+      ctx.lineWidth = 16;
+      ctx.beginPath();
+      ctx.moveTo(0, 145);
+      ctx.quadraticCurveTo(120, 95, 240, 145);
+      ctx.quadraticCurveTo(350, 190, CANVAS_WIDTH, 122);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(192, 132, 252, 0.36)";
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.moveTo(0, 190);
+      ctx.quadraticCurveTo(140, 132, 300, 178);
+      ctx.quadraticCurveTo(390, 202, CANVAS_WIDTH, 150);
+      ctx.stroke();
     }
   } else {
     ctx.fillStyle = style.cloudColor;
     drawCloud(90, 90);
     drawCloud(330, 150);
+    if (style.sun) {
+      ctx.fillStyle = style.sun;
+      ctx.beginPath();
+      ctx.arc(390, 82, 32, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
 
 function getBackgroundStyle() {
+  if (game.score >= 150) {
+    return {
+      skyTop: "#f97316",
+      skyBottom: "#fde68a",
+      cloudColor: "rgba(255, 255, 255, 0.5)",
+      stars: false,
+      sun: "rgba(255, 245, 157, 0.82)",
+    };
+  }
+  if (game.score >= 120) {
+    return {
+      skyTop: "#042f2e",
+      skyBottom: "#312e81",
+      cloudColor: "rgba(255, 255, 255, 0.35)",
+      stars: true,
+      starCount: 36,
+      moon: true,
+      aurora: true,
+      meteors: false,
+    };
+  }
+  if (game.score >= 80) {
+    return {
+      skyTop: "#020617",
+      skyBottom: "#1e1b4b",
+      cloudColor: "rgba(255, 255, 255, 0.35)",
+      stars: true,
+      starCount: 34,
+      moon: true,
+      aurora: false,
+      meteors: true,
+    };
+  }
   if (game.score >= 50) {
     return {
       skyTop: "#172554",
       skyBottom: "#4c1d95",
       cloudColor: "rgba(255, 255, 255, 0.35)",
       stars: true,
+      starCount: 24,
+      moon: true,
+      aurora: false,
+      meteors: false,
     };
   }
   if (game.score >= 20) {
@@ -888,6 +1159,7 @@ function getBackgroundStyle() {
       skyBottom: "#ffd6a5",
       cloudColor: "rgba(255, 255, 255, 0.58)",
       stars: false,
+      sun: "rgba(255, 232, 153, 0.85)",
     };
   }
   return {
@@ -895,6 +1167,7 @@ function getBackgroundStyle() {
     skyBottom: "#eaf7ff",
     cloudColor: "rgba(255, 255, 255, 0.72)",
     stars: false,
+    sun: "rgba(255, 245, 157, 0.9)",
   };
 }
 
@@ -939,15 +1212,31 @@ function drawBird() {
   const skinLevel = getBirdSkinLevel();
   const wingLift = Math.sin(game.frame * 0.38) * 5;
   const deathTilt = game.over ? 0.85 : 0;
+  const bodyColor = {
+    1: "#ffd84d",
+    2: "#ffd84d",
+    3: "#fef3c7",
+    4: "#bfdbfe",
+    5: "#ddd6fe",
+    6: "#fef9c3",
+  }[skinLevel] || "#fef9c3";
+  const wingColor = {
+    1: "#f6c343",
+    2: "#60a5fa",
+    3: "#60a5fa",
+    4: "#22d3ee",
+    5: "#a78bfa",
+    6: "#fbbf24",
+  }[skinLevel] || "#fbbf24";
   ctx.save();
   ctx.translate(BIRD_X, game.birdY);
   ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)) + deathTilt);
-  ctx.fillStyle = skinLevel >= 3 ? "#fef3c7" : "#ffd84d";
+  ctx.fillStyle = bodyColor;
   ctx.beginPath();
   ctx.arc(0, 0, BIRD_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = skinLevel >= 2 ? "#60a5fa" : "#f6c343";
+  ctx.fillStyle = wingColor;
   ctx.beginPath();
   ctx.ellipse(-8, 6 + wingLift, 9, 5, -0.5, 0, Math.PI * 2);
   ctx.fill();
@@ -972,6 +1261,47 @@ function drawBird() {
     ctx.lineTo(-16, -18);
     ctx.lineTo(-6, -20);
     ctx.lineTo(-12, -27);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (skinLevel >= 4) {
+    ctx.strokeStyle = "#0f766e";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-14, 4);
+    ctx.quadraticCurveTo(-28, 10 + wingLift * 0.2, -34, 0);
+    ctx.stroke();
+    ctx.fillStyle = "#14b8a6";
+    ctx.fillRect(-16, -2, 15, 6);
+  }
+
+  if (skinLevel >= 5) {
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.88)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, BIRD_RADIUS + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#facc15";
+    for (let i = 0; i < 3; i += 1) {
+      const angle = game.frame * 0.04 + i * 2.1;
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * 24, Math.sin(angle) * 18, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  if (skinLevel >= 6) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.86)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(0, -20, 15, 5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(251, 191, 36, 0.75)";
+    ctx.beginPath();
+    ctx.moveTo(-18, 12);
+    ctx.lineTo(-36, 20);
+    ctx.lineTo(-18, 20);
     ctx.closePath();
     ctx.fill();
   }
@@ -1090,7 +1420,9 @@ function clearData() {
   }
   allLogs = [];
   playerCounts = {};
+  playerProfiles = {};
   savePlayerCounts();
+  savePlayerProfiles();
   updatePlayerCountDisplay();
   saveLogs();
   gameStatus.textContent = "Saved data cleared.";
@@ -1127,16 +1459,16 @@ async function uploadCompletedGame() {
   const completedGameUpload = await uploadRows(completedRows, {
     automatic: true,
     silentWhenMissing: true,
-    statusMessage: `Sending complete round: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows...`,
-    successMessage: `Complete round request sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, death reason ${lastRow.death_reason}.`,
+    statusMessage: `Queueing complete round: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows...`,
+    successMessage: `Complete round queued: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, death reason ${lastRow.death_reason}.`,
   });
   if (!completedGameUpload) {
     return;
   }
 
-  setUploadStatus(`Complete round request sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
+  setUploadStatus(`Complete round queued: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
   if (game.over) {
-    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round request sent.`;
+    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round queued.`;
   }
 }
 
@@ -1146,6 +1478,14 @@ function buildUploadPayload(rowsToUpload) {
     uploaded_at: new Date().toISOString(),
     rows: rowsToUpload,
   };
+}
+
+function canUseBeacon(body) {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof navigator.sendBeacon === "function" &&
+    body.length <= BEACON_MAX_BYTES
+  );
 }
 
 async function uploadRows(
@@ -1175,18 +1515,34 @@ async function uploadRows(
   }
 
   const payload = buildUploadPayload(rowsToUpload);
+  const body = JSON.stringify(payload);
 
   const uploadingMessage = statusMessage || (automatic
     ? `Auto-uploading completed game: ${rowsToUpload.length} rows...`
     : `Uploading ${rowsToUpload.length} rows...`);
   setUploadStatus(uploadingMessage);
   try {
+    if (automatic && canUseBeacon(body)) {
+      const queued = navigator.sendBeacon(
+        endpoint,
+        new Blob([body], { type: "text/plain;charset=utf-8" })
+      );
+      if (queued) {
+        const sentMessage = successMessage || `Completed game request queued: ${rowsToUpload.length} rows.`;
+        setUploadStatus(sentMessage);
+        if (automatic && game.over) {
+          gameStatus.textContent = `Game over: ${game.deathReason}. Upload request queued.`;
+        }
+        return true;
+      }
+    }
+
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload),
+      body,
     });
     const sentMessage = successMessage || (automatic
       ? `Completed game request sent: ${rowsToUpload.length} rows.`

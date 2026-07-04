@@ -27,6 +27,8 @@ The game is designed so a new player can understand it in less than 10 seconds.
 
 Visual upgrades are feedback only. Background color changes, bird skins, sound effects, animations, and achievements do not change gravity, pipe speed, pipe gap, pipe distance, collision size, or jump force.
 
+The dashboard also keeps each player's best score and unlocked achievements in browser `localStorage`.
+
 ## Data Collected
 
 To keep the Google Sheet small, the game records one row every 5 frames. Click frames and death frames are always recorded, even if they are not on a 5-frame sample.
