@@ -16,17 +16,18 @@ Open `index.html` in a browser, or use the GitHub Pages link.
 
 1. Choose a speed level: `Slow`, `Normal`, or `Fast`.
 2. Enter the player's name.
-3. Choose `Flap Power`. Use `High` for easier first-time play.
-4. Press `Start`.
-5. Press `Space`, click the mouse, or tap the phone screen to make the bird fly upward.
-6. Avoid the pipes and the ground.
-7. After game over, read the dashboard or export CSV.
+3. Press `Start`, or tap the game screen.
+4. Press `Space`, click the mouse, or tap the phone screen to make the bird fly upward.
+5. Avoid the pipes and the ground.
+6. After game over, read the dashboard or export CSV.
+
+Player name is required each time the page is opened. During the same page session, the name stays in the input so the player can play multiple rounds.
 
 The game is designed so a new player can understand it in less than 10 seconds.
 
 ## Data Collected
 
-Every frame records one row:
+To keep the Google Sheet small, the game records one row every 5 frames. Click frames and death frames are always recorded, even if they are not on a 5-frame sample.
 
 - `game_id`
 - `player_name`
@@ -46,6 +47,7 @@ Every frame records one row:
 - `is_click`
 - `is_dead`
 - `death_reason`
+- `sample_type`
 
 For click frames, the row also records:
 
@@ -56,6 +58,8 @@ For click frames, the row also records:
 All rows are saved in browser `localStorage`, so restarting the game does not delete old data.
 
 `player_play_count` is important. Use it to compare a player's early rounds and later rounds instead of judging skill only by score.
+
+`flap_power` is fixed at `normal` so the main experimental variables are speed level and player practice count.
 
 ## Export CSV
 
@@ -99,6 +103,7 @@ const HEADERS = [
   "death_reason",
   "click_interval",
   "error_to_center",
+  "sample_type",
 ];
 
 function doPost(e) {
@@ -124,7 +129,7 @@ function doPost(e) {
 6. Set `Who has access` to `Anyone`.
 7. Copy the Web App URL.
 8. Paste that URL into the game's `Upload Endpoint` box and press `Save URL`.
-9. After that, every finished game uploads automatically.
+9. After that, gameplay checkpoints upload while playing, and the final rows upload after game over.
 
 Each device can use the same upload URL, so all data goes into the same Google Sheet.
 
@@ -168,7 +173,7 @@ This avoids defining "expert" only by score.
 
 This MVP does not train AI yet.
 
-However, the exported frame data already includes player state and `is_click`, so a future AI model can try to predict whether the next frame will be a click.
+However, the exported sampled frame data already includes player state and `is_click`, so a future AI model can try to predict whether the next recorded sample will be a click.
 
 Useful features could include:
 

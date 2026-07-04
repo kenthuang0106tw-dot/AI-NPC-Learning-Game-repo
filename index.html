@@ -12,7 +12,7 @@
         <p class="eyebrow">Elementary Science Fair MVP</p>
         <h1 id="pageTitle">Flappy Skill Lab</h1>
         <p class="intro">
-          A simple Flappy Bird-style game that records player movement every frame, then exports data for Excel or Python analysis.
+          A simple Flappy Bird-style game that records sampled player movement, then exports data for Excel or Python analysis.
         </p>
       </section>
 
@@ -51,7 +51,7 @@
             <h2>Before Start</h2>
             <label class="text-field">
               Player Name
-              <input id="playerNameInput" type="text" autocomplete="name" placeholder="Example: Amy" />
+              <input id="playerNameInput" type="text" autocomplete="off" placeholder="Example: Amy" />
             </label>
             <p class="player-note">
               This player has played <strong id="playerPlayCount">0</strong> saved rounds on this browser.
@@ -60,12 +60,6 @@
               <label><input type="radio" name="speed" value="slow" /> Slow</label>
               <label><input type="radio" name="speed" value="normal" checked /> Normal</label>
               <label><input type="radio" name="speed" value="fast" /> Fast</label>
-            </div>
-            <div class="flap-options" role="group" aria-label="Flap power">
-              <p class="setting-label">Flap Power</p>
-              <label><input type="radio" name="flapPower" value="low" /> Low</label>
-              <label><input type="radio" name="flapPower" value="normal" /> Normal</label>
-              <label><input type="radio" name="flapPower" value="high" checked /> High</label>
             </div>
           </section>
 
@@ -117,7 +111,7 @@
         </article>
         <article>
           <h2>2. Can AI predict the next click?</h2>
-          <p>This MVP only collects the frame-by-frame data needed for a future AI model.</p>
+          <p>This MVP collects sampled frame data needed for a future AI model.</p>
         </article>
         <article>
           <h2>3. What changes when speed increases?</h2>
@@ -126,6 +120,6 @@
       </section>
     </main>
 
-    <script src="src/app.js?v=checkpoint-upload-1"></script>
+    <script src="src/app.js?v=sampled-normal-flap-1"></script>
   </body>
 </html>

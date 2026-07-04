@@ -3,7 +3,6 @@
 
 const STORAGE_KEY = "flappy_skill_lab_logs_v1";
 const PLAYER_COUNTS_KEY = "flappy_skill_lab_player_counts_v1";
-const PLAYER_NAME_KEY = "flappy_skill_lab_player_name_v1";
 const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
 const UPLOAD_ENDPOINT_KEY = "flappy_skill_lab_upload_endpoint_v1";
 const UPLOADED_ROWS_KEY = "flappy_skill_lab_uploaded_rows_v1";
@@ -18,17 +17,13 @@ const GAP_SIZE = 150;
 const PIPE_WIDTH = 70;
 const PIPE_SPACING = 260;
 const CHECKPOINT_UPLOAD_FRAMES = 180;
+const SAMPLE_EVERY_FRAMES = 5;
+const FIXED_FLAP_POWER = "normal";
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
   normal: { gravity: 0.44, flap: -7.8, pipeSpeed: 2.8 },
   fast: { gravity: 0.52, flap: -8.4, pipeSpeed: 3.6 },
-};
-
-const FLAP_POWER = {
-  low: 0.9,
-  normal: 1,
-  high: 1.18,
 };
 
 const canvas = document.querySelector("#gameCanvas");
@@ -45,7 +40,6 @@ const uploadButton = document.querySelector("#uploadButton");
 const uploadStatus = document.querySelector("#uploadStatus");
 const uploadStatusTop = document.querySelector("#uploadStatusTop");
 const speedInputs = document.querySelectorAll("input[name='speed']");
-const flapPowerInputs = document.querySelectorAll("input[name='flapPower']");
 
 const gameStatus = document.querySelector("#gameStatus");
 const scoreValue = document.querySelector("#scoreValue");
@@ -84,7 +78,7 @@ const game = {
   score: 0,
   lastClickTime: null,
   deathReason: "none",
-  flapPower: "high",
+  flapPower: FIXED_FLAP_POWER,
   uploadedFrameCount: 0,
   lastCheckpointFrame: 0,
   isUploadingRound: false,
@@ -150,7 +144,6 @@ function preparePlayerForGame() {
 
   playerCounts[name] = (playerCounts[name] || 0) + 1;
   savePlayerCounts();
-  localStorage.setItem(PLAYER_NAME_KEY, name);
   game.playerName = name;
   game.playerPlayCount = playerCounts[name];
   updatePlayerCountDisplay();
@@ -160,11 +153,6 @@ function preparePlayerForGame() {
 function getSpeedLevel() {
   const selected = [...speedInputs].find((input) => input.checked);
   return selected ? selected.value : "normal";
-}
-
-function getFlapPower() {
-  const selected = [...flapPowerInputs].find((input) => input.checked);
-  return selected ? selected.value : "high";
 }
 
 function randomGapCenter() {
@@ -193,7 +181,7 @@ function resetGame() {
   game.playerName = getPlayerName();
   game.playerPlayCount = playerCounts[game.playerName] || 0;
   game.speedLevel = getSpeedLevel();
-  game.flapPower = getFlapPower();
+  game.flapPower = FIXED_FLAP_POWER;
   game.frame = 0;
   game.startTime = 0;
   game.lastFrameTime = 0;
@@ -233,6 +221,13 @@ function restartGame() {
   startGame();
 }
 
+function startOrFlap() {
+  if (!game.running) {
+    startGame();
+  }
+  flap();
+}
+
 function flap() {
   if (!game.running) {
     return;
@@ -258,7 +253,7 @@ function update(now) {
   let nextPipeDistance = nextPipe ? nextPipe.x - BIRD_X : "";
 
   if (isClick) {
-    game.birdVy = settings.flap * FLAP_POWER[game.flapPower];
+    game.birdVy = settings.flap;
     clickInterval = game.lastClickTime === null ? "" : ((now - game.lastClickTime) / 1000).toFixed(3);
     game.lastClickTime = now;
     errorToCenter = nextPipe ? (game.birdY - nextPipe.gapCenter).toFixed(2) : "";
@@ -282,14 +277,18 @@ function update(now) {
     game.deathReason = death;
   }
 
-  logFrame({
-    time: elapsedSeconds,
-    isClick,
-    clickInterval,
-    errorToCenter,
-    isDead,
-    deathReason: game.deathReason,
-  });
+  const isSampleFrame = game.frame % SAMPLE_EVERY_FRAMES === 0;
+  if (isSampleFrame || isClick || isDead) {
+    logFrame({
+      time: elapsedSeconds,
+      isClick,
+      clickInterval,
+      errorToCenter,
+      isDead,
+      deathReason: game.deathReason,
+      sampleType: getSampleType({ isSampleFrame, isClick, isDead }),
+    });
+  }
 
   if (!isDead && game.frame - game.lastCheckpointFrame >= CHECKPOINT_UPLOAD_FRAMES) {
     game.lastCheckpointFrame = game.frame;
@@ -356,7 +355,20 @@ function getDeathReason() {
   return "none";
 }
 
-function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathReason }) {
+function getSampleType({ isSampleFrame, isClick, isDead }) {
+  if (isDead) {
+    return "death";
+  }
+  if (isClick && isSampleFrame) {
+    return "sample_click";
+  }
+  if (isClick) {
+    return "click";
+  }
+  return "sample";
+}
+
+function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathReason, sampleType }) {
   const pipe = getNextPipe();
   const row = {
     game_id: game.gameId,
@@ -379,6 +391,7 @@ function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathRe
     death_reason: deathReason,
     click_interval: clickInterval,
     error_to_center: errorToCenter,
+    sample_type: sampleType,
   };
   currentGameLogs.push(row);
 }
@@ -512,15 +525,14 @@ function drawGround() {
 
 function drawHud() {
   ctx.fillStyle = "rgba(17, 24, 39, 0.78)";
-  ctx.fillRect(14, 14, 150, 66);
+  ctx.fillRect(14, 14, 170, 78);
   ctx.fillStyle = "#ffffff";
   ctx.font = "700 20px system-ui";
   ctx.fillText(`Score: ${game.score}`, 28, 42);
   ctx.font = "500 14px system-ui";
   ctx.fillText(`Speed: ${game.speedLevel}`, 28, 64);
-  ctx.fillText(`Flap: ${game.flapPower}`, 28, 82);
   if (game.playerName) {
-    ctx.fillText(`${game.playerName} #${game.playerPlayCount}`, 28, 100);
+    ctx.fillText(`${game.playerName} #${game.playerPlayCount}`, 28, 82);
   }
 
   if (!game.running && !game.over) {
@@ -565,6 +577,7 @@ function exportCsv() {
     "death_reason",
     "click_interval",
     "error_to_center",
+    "sample_type",
   ];
   const csvRows = [
     headers.join(","),
@@ -733,16 +746,16 @@ uploadButton.addEventListener("click", uploadData);
 playerNameInput.addEventListener("input", updatePlayerCountDisplay);
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
-  flap();
+  startOrFlap();
 });
 document.addEventListener("keydown", (event) => {
   if (event.code === "Space") {
     event.preventDefault();
-    flap();
+    startOrFlap();
   }
 });
 
-playerNameInput.value = localStorage.getItem(PLAYER_NAME_KEY) || "";
+playerNameInput.value = "";
 uploadEndpointInput.value = localStorage.getItem(UPLOAD_ENDPOINT_KEY) || DEFAULT_UPLOAD_ENDPOINT;
 setUploadStatus("Ready. Finished games upload automatically.");
 updatePlayerCountDisplay();
