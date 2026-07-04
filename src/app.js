@@ -42,6 +42,7 @@ const uploadEndpointInput = document.querySelector("#uploadEndpointInput");
 const saveEndpointButton = document.querySelector("#saveEndpointButton");
 const uploadButton = document.querySelector("#uploadButton");
 const uploadStatus = document.querySelector("#uploadStatus");
+const uploadStatusTop = document.querySelector("#uploadStatusTop");
 const speedInputs = document.querySelectorAll("input[name='speed']");
 const flapPowerInputs = document.querySelectorAll("input[name='flapPower']");
 
@@ -56,6 +57,7 @@ const clicksPerSecond = document.querySelector("#clicksPerSecond");
 const averageError = document.querySelector("#averageError");
 const deathReason = document.querySelector("#deathReason");
 const heightVariation = document.querySelector("#heightVariation");
+const uploadResult = document.querySelector("#uploadResult");
 
 let allLogs = loadLogs();
 let playerCounts = loadPlayerCounts();
@@ -116,6 +118,12 @@ function getDeviceId() {
 function saveLogs() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(allLogs));
   savedRowsValue.textContent = allLogs.length;
+}
+
+function setUploadStatus(message) {
+  uploadStatus.textContent = message;
+  uploadStatusTop.textContent = `Upload: ${message}`;
+  uploadResult.textContent = message;
 }
 
 function getPlayerName() {
@@ -208,6 +216,7 @@ function startGame() {
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "Playing. Tap once to fly upward.";
+  setUploadStatus("Ready. This round uploads after game over.");
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -384,6 +393,7 @@ function resetDashboard() {
   averageError.textContent = "--";
   deathReason.textContent = "--";
   heightVariation.textContent = "--";
+  uploadResult.textContent = uploadStatus.textContent || "--";
 }
 
 function showDashboard(elapsedSeconds) {
@@ -582,9 +592,7 @@ function saveEndpoint() {
   localStorage.setItem(UPLOAD_ENDPOINT_KEY, endpoint);
   localStorage.setItem(UPLOADED_ROWS_KEY, "0");
   uploadEndpointInput.value = endpoint;
-  uploadStatus.textContent = endpoint
-    ? "Upload URL saved. Finished games will upload automatically."
-    : "Upload URL cleared.";
+  setUploadStatus(endpoint ? "Ready. Finished games upload automatically." : "URL cleared.");
 }
 
 function getUploadEndpoint() {
@@ -604,7 +612,7 @@ async function uploadRows(
     if (silentWhenMissing) {
       return;
     }
-    uploadStatus.textContent = "Paste and save an upload endpoint first.";
+    setUploadStatus("Paste and save an upload endpoint first.");
     return;
   }
 
@@ -612,7 +620,7 @@ async function uploadRows(
     if (silentWhenMissing) {
       return;
     }
-    uploadStatus.textContent = "No new rows to upload.";
+    setUploadStatus("No new rows to upload.");
     return;
   }
 
@@ -622,9 +630,7 @@ async function uploadRows(
     rows: rowsToUpload,
   };
 
-  uploadStatus.textContent = automatic
-    ? `Auto-uploading ${rowsToUpload.length} rows...`
-    : `Uploading ${rowsToUpload.length} rows...`;
+  setUploadStatus(automatic ? `Auto-uploading ${rowsToUpload.length} rows...` : `Uploading ${rowsToUpload.length} rows...`);
   try {
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
@@ -636,13 +642,19 @@ async function uploadRows(
     if (uploadedThrough !== null) {
       localStorage.setItem(UPLOADED_ROWS_KEY, String(uploadedThrough));
     }
-    uploadStatus.textContent = automatic
+    const sentMessage = automatic
       ? `Auto-upload sent: ${rowsToUpload.length} new rows.`
       : `Upload sent: ${rowsToUpload.length} new rows.`;
+    setUploadStatus(sentMessage);
+    if (automatic && game.over) {
+      gameStatus.textContent = `Game over: ${game.deathReason}. Upload sent.`;
+    }
   } catch {
-    uploadStatus.textContent = automatic
-      ? "Auto-upload failed. Data is still saved locally; use Upload Data to try again."
-      : "Upload failed. Check the endpoint URL and internet connection.";
+    setUploadStatus(
+      automatic
+        ? "Auto-upload failed. Use Upload Data to try again."
+        : "Upload failed. Check the endpoint URL and internet connection."
+    );
   }
 }
 
@@ -679,7 +691,7 @@ document.addEventListener("keydown", (event) => {
 
 playerNameInput.value = localStorage.getItem(PLAYER_NAME_KEY) || "";
 uploadEndpointInput.value = localStorage.getItem(UPLOAD_ENDPOINT_KEY) || DEFAULT_UPLOAD_ENDPOINT;
-uploadStatus.textContent = "Auto-upload is ready. Finished games upload automatically.";
+setUploadStatus("Ready. Finished games upload automatically.");
 updatePlayerCountDisplay();
 resetGame();
 saveLogs();

@@ -23,7 +23,10 @@
               <p class="eyebrow">Experiment game</p>
               <h2>Tap to Fly</h2>
             </div>
-            <div class="status-pill" id="gameStatus">Choose speed and press Start.</div>
+            <div class="status-stack">
+              <div class="status-pill" id="gameStatus">Choose speed and press Start.</div>
+              <div class="status-pill upload-pill" id="uploadStatusTop">Upload: ready</div>
+            </div>
           </div>
 
           <canvas id="gameCanvas" width="480" height="640" aria-label="Flappy game canvas"></canvas>
@@ -101,6 +104,7 @@
               <div><dt>Avg height error</dt><dd id="averageError">--</dd></div>
               <div><dt>Death reason</dt><dd id="deathReason">--</dd></div>
               <div><dt>Height variation</dt><dd id="heightVariation">--</dd></div>
+              <div><dt>Upload result</dt><dd id="uploadResult">--</dd></div>
             </dl>
           </section>
         </aside>
@@ -122,6 +126,6 @@
       </section>
     </main>
 
-    <script src="src/app.js?v=auto-round-upload-1"></script>
+    <script src="src/app.js?v=visible-upload-status-1"></script>
   </body>
 </html>

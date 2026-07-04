@@ -124,6 +124,18 @@ h2 {
   text-align: right;
 }
 
+.status-stack {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.upload-pill {
+  background: #e8f7ef;
+  color: #1d6b3a;
+  font-weight: 900;
+}
+
 #gameCanvas {
   display: block;
   width: min(100%, 480px);
