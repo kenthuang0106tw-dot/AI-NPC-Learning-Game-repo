@@ -17,6 +17,7 @@ const GROUND_Y = CANVAS_HEIGHT - 54;
 const GAP_SIZE = 150;
 const PIPE_WIDTH = 70;
 const PIPE_SPACING = 260;
+const CHECKPOINT_UPLOAD_FRAMES = 180;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -84,6 +85,10 @@ const game = {
   lastClickTime: null,
   deathReason: "none",
   flapPower: "high",
+  uploadedFrameCount: 0,
+  lastCheckpointFrame: 0,
+  isUploadingRound: false,
+  needsFinalUpload: false,
 };
 
 function loadLogs() {
@@ -198,6 +203,10 @@ function resetGame() {
   game.score = 0;
   game.lastClickTime = null;
   game.deathReason = "none";
+  game.uploadedFrameCount = 0;
+  game.lastCheckpointFrame = 0;
+  game.isUploadingRound = false;
+  game.needsFinalUpload = false;
 
   gameStatus.textContent = "Ready. Press Start, Space, click, or tap.";
   updateLiveMetrics(0);
@@ -216,7 +225,7 @@ function startGame() {
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "Playing. Tap once to fly upward.";
-  setUploadStatus("Ready. This round uploads after game over.");
+  setUploadStatus("Ready. Backups upload while playing.");
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -281,6 +290,11 @@ function update(now) {
     isDead,
     deathReason: game.deathReason,
   });
+
+  if (!isDead && game.frame - game.lastCheckpointFrame >= CHECKPOINT_UPLOAD_FRAMES) {
+    game.lastCheckpointFrame = game.frame;
+    uploadCurrentRound();
+  }
 
   drawScene();
   updateLiveMetrics(elapsedSeconds);
@@ -379,11 +393,7 @@ function endGame(elapsedSeconds) {
   showDashboard(elapsedSeconds);
   gameStatus.textContent = `Game over: ${game.deathReason}`;
   drawScene();
-  uploadRows(currentGameLogs, {
-    automatic: true,
-    silentWhenMissing: true,
-    uploadedThrough: allLogs.length,
-  });
+  uploadCurrentRound({ final: true });
 }
 
 function resetDashboard() {
@@ -603,25 +613,59 @@ function getUploadEndpoint() {
   );
 }
 
+async function uploadCurrentRound({ final = false } = {}) {
+  if (game.isUploadingRound) {
+    if (final) {
+      game.needsFinalUpload = true;
+    }
+    return;
+  }
+
+  const uploadToFrame = currentGameLogs.length;
+  const rowsToUpload = currentGameLogs.slice(game.uploadedFrameCount, uploadToFrame);
+  if (!rowsToUpload.length) {
+    return;
+  }
+
+  game.isUploadingRound = true;
+  const uploadedThrough = final ? allLogs.length : null;
+  const ok = await uploadRows(rowsToUpload, {
+    automatic: true,
+    silentWhenMissing: true,
+    uploadedThrough,
+    checkpoint: !final,
+  });
+
+  if (ok) {
+    game.uploadedFrameCount = uploadToFrame;
+  }
+
+  game.isUploadingRound = false;
+  if (game.needsFinalUpload) {
+    game.needsFinalUpload = false;
+    uploadCurrentRound({ final: true });
+  }
+}
+
 async function uploadRows(
   rowsToUpload,
-  { automatic = false, silentWhenMissing = false, uploadedThrough = null } = {}
+  { automatic = false, silentWhenMissing = false, uploadedThrough = null, checkpoint = false } = {}
 ) {
   const endpoint = getUploadEndpoint();
   if (!endpoint) {
     if (silentWhenMissing) {
-      return;
+      return false;
     }
     setUploadStatus("Paste and save an upload endpoint first.");
-    return;
+    return false;
   }
 
   if (!rowsToUpload.length) {
     if (silentWhenMissing) {
-      return;
+      return false;
     }
     setUploadStatus("No new rows to upload.");
-    return;
+    return false;
   }
 
   const payload = {
@@ -630,7 +674,12 @@ async function uploadRows(
     rows: rowsToUpload,
   };
 
-  setUploadStatus(automatic ? `Auto-uploading ${rowsToUpload.length} rows...` : `Uploading ${rowsToUpload.length} rows...`);
+  const uploadingMessage = checkpoint
+    ? `Backup uploading ${rowsToUpload.length} rows...`
+    : automatic
+      ? `Auto-uploading ${rowsToUpload.length} rows...`
+      : `Uploading ${rowsToUpload.length} rows...`;
+  setUploadStatus(uploadingMessage);
   try {
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
@@ -642,19 +691,23 @@ async function uploadRows(
     if (uploadedThrough !== null) {
       localStorage.setItem(UPLOADED_ROWS_KEY, String(uploadedThrough));
     }
-    const sentMessage = automatic
-      ? `Auto-upload sent: ${rowsToUpload.length} new rows.`
-      : `Upload sent: ${rowsToUpload.length} new rows.`;
+    const sentMessage = checkpoint
+      ? `Backup sent: ${rowsToUpload.length} rows.`
+      : automatic
+        ? `Auto-upload sent: ${rowsToUpload.length} new rows.`
+        : `Upload sent: ${rowsToUpload.length} new rows.`;
     setUploadStatus(sentMessage);
     if (automatic && game.over) {
       gameStatus.textContent = `Game over: ${game.deathReason}. Upload sent.`;
     }
+    return true;
   } catch {
     setUploadStatus(
       automatic
         ? "Auto-upload failed. Use Upload Data to try again."
         : "Upload failed. Check the endpoint URL and internet connection."
     );
+    return false;
   }
 }
 
