@@ -9,6 +9,10 @@
   box-sizing: border-box;
 }
 
+html {
+  touch-action: manipulation;
+}
+
 body {
   min-height: 100vh;
   margin: 0;
@@ -144,7 +148,10 @@ h2 {
   border: 4px solid #17202a;
   border-radius: 8px;
   background: #8ed8ff;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .quick-help {

@@ -27,9 +27,10 @@ const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 6;
 const UPLOAD_CHUNK_SIZE = 80;
 const COMPLETE_UPLOAD_ATTEMPTS = 3;
-const VERIFY_RETRIES = 5;
-const VERIFY_WAIT_MS = 1400;
-const FORM_POST_WAIT_MS = 2500;
+const VERIFY_RETRIES = 2;
+const VERIFY_WAIT_MS = 700;
+const FORM_POST_WAIT_MS = 650;
+const PENDING_UPLOAD_INTERVAL_MS = 10000;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -80,6 +81,8 @@ let currentGameLogs = [];
 let clickEvents = [];
 let passEffects = [];
 let uploadInProgress = false;
+let uploadRerunRequested = false;
+let lastCanvasTouchEnd = 0;
 const deviceId = getDeviceId();
 
 const game = {
@@ -1130,23 +1133,27 @@ function enqueuePendingUpload(rows) {
 
 async function processPendingUploads() {
   if (uploadInProgress || !pendingUploads.length) {
+    if (uploadInProgress) {
+      uploadRerunRequested = true;
+    }
     return;
   }
 
   uploadInProgress = true;
   try {
-    for (const pending of [...pendingUploads]) {
-      const verifiedBeforeUpload = await verifyGameDeathRow(pending.gameId);
-      if (verifiedBeforeUpload) {
-        removePendingUpload(pending.gameId);
-        continue;
-      }
-
+    const uploadBatch = getPendingUploadOrder();
+    for (const pending of uploadBatch) {
       const uploaded = await sendPendingUpload(pending);
-      if (!uploaded) {
-        continue;
+      if (uploaded) {
+        pending.attempts += 1;
+        savePendingUploads();
       }
+    }
 
+    for (const pending of getPendingUploadOrder()) {
+      if (uploadRerunRequested) {
+        break;
+      }
       setUploadStatus(`Checking Sheet for ${pending.playerName} #${pending.playerPlayCount}...`);
       const verified = await verifyGameDeathRow(pending.gameId);
       if (verified) {
@@ -1156,7 +1163,6 @@ async function processPendingUploads() {
           gameStatus.textContent = `Game over: ${game.deathReason}. Sheet verified.`;
         }
       } else {
-        pending.attempts += 1;
         savePendingUploads();
         setUploadStatus(`Still not verified. Will retry automatically: ${pending.playerName} #${pending.playerPlayCount}.`);
         if (game.gameId === pending.gameId && game.over) {
@@ -1166,7 +1172,17 @@ async function processPendingUploads() {
     }
   } finally {
     uploadInProgress = false;
+    if (uploadRerunRequested && pendingUploads.length) {
+      uploadRerunRequested = false;
+      window.setTimeout(processPendingUploads, 0);
+    } else {
+      uploadRerunRequested = false;
+    }
   }
+}
+
+function getPendingUploadOrder() {
+  return [...pendingUploads].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
 async function sendPendingUpload(pending) {
@@ -1177,8 +1193,8 @@ async function sendPendingUpload(pending) {
     const ok = await uploadRows(chunk, {
       automatic: true,
       silentWhenMissing: true,
-        statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
-        successMessage: `Pending complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
+      statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
+      successMessage: `Pending complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
     });
     if (!ok) {
       return false;
@@ -1391,6 +1407,23 @@ canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   startOrFlap();
 });
+canvas.addEventListener("dblclick", (event) => {
+  event.preventDefault();
+});
+canvas.addEventListener(
+  "touchend",
+  (event) => {
+    const now = Date.now();
+    if (now - lastCanvasTouchEnd < 350) {
+      event.preventDefault();
+    }
+    lastCanvasTouchEnd = now;
+  },
+  { passive: false }
+);
+document.addEventListener("gesturestart", (event) => {
+  event.preventDefault();
+});
 document.addEventListener("keydown", (event) => {
   if (event.code === "Space") {
     event.preventDefault();
@@ -1406,3 +1439,10 @@ updatePlayerCountDisplay();
 resetGame();
 saveLogs();
 processPendingUploads();
+window.setInterval(processPendingUploads, PENDING_UPLOAD_INTERVAL_MS);
+window.addEventListener("online", processPendingUploads);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    processPendingUploads();
+  }
+});
