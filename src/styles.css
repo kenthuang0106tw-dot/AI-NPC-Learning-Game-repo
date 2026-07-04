@@ -191,6 +191,38 @@ h2 {
   font-weight: 900;
 }
 
+.text-field {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: #607487;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.text-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid rgba(23, 32, 42, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.player-note,
+.upload-status {
+  margin: 0 0 12px;
+  color: #607487;
+  line-height: 1.45;
+}
+
+.upload-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .speed-options label,
 .flap-options label {
   display: flex;

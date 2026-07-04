@@ -2,6 +2,11 @@
 // This file intentionally keeps the game simple and readable for a science fair project.
 
 const STORAGE_KEY = "flappy_skill_lab_logs_v1";
+const PLAYER_COUNTS_KEY = "flappy_skill_lab_player_counts_v1";
+const PLAYER_NAME_KEY = "flappy_skill_lab_player_name_v1";
+const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
+const UPLOAD_ENDPOINT_KEY = "flappy_skill_lab_upload_endpoint_v1";
+const UPLOADED_ROWS_KEY = "flappy_skill_lab_uploaded_rows_v1";
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 640;
 const BIRD_X = 120;
@@ -25,10 +30,16 @@ const FLAP_POWER = {
 
 const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
+const playerNameInput = document.querySelector("#playerNameInput");
+const playerPlayCount = document.querySelector("#playerPlayCount");
 const startButton = document.querySelector("#startButton");
 const restartButton = document.querySelector("#restartButton");
 const exportButton = document.querySelector("#exportButton");
 const clearButton = document.querySelector("#clearButton");
+const uploadEndpointInput = document.querySelector("#uploadEndpointInput");
+const saveEndpointButton = document.querySelector("#saveEndpointButton");
+const uploadButton = document.querySelector("#uploadButton");
+const uploadStatus = document.querySelector("#uploadStatus");
 const speedInputs = document.querySelectorAll("input[name='speed']");
 const flapPowerInputs = document.querySelectorAll("input[name='flapPower']");
 
@@ -45,15 +56,19 @@ const deathReason = document.querySelector("#deathReason");
 const heightVariation = document.querySelector("#heightVariation");
 
 let allLogs = loadLogs();
+let playerCounts = loadPlayerCounts();
 let animationId = null;
 let pendingClick = false;
 let currentGameLogs = [];
 let clickEvents = [];
+const deviceId = getDeviceId();
 
 const game = {
   running: false,
   over: false,
   gameId: "",
+  playerName: "",
+  playerPlayCount: 0,
   speedLevel: "normal",
   frame: 0,
   startTime: 0,
@@ -75,9 +90,56 @@ function loadLogs() {
   }
 }
 
+function loadPlayerCounts() {
+  try {
+    return JSON.parse(localStorage.getItem(PLAYER_COUNTS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function savePlayerCounts() {
+  localStorage.setItem(PLAYER_COUNTS_KEY, JSON.stringify(playerCounts));
+}
+
+function getDeviceId() {
+  let existing = localStorage.getItem(DEVICE_ID_KEY);
+  if (!existing) {
+    existing = `device_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(DEVICE_ID_KEY, existing);
+  }
+  return existing;
+}
+
 function saveLogs() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(allLogs));
   savedRowsValue.textContent = allLogs.length;
+}
+
+function getPlayerName() {
+  return playerNameInput.value.trim();
+}
+
+function updatePlayerCountDisplay() {
+  const name = getPlayerName();
+  playerPlayCount.textContent = name ? playerCounts[name] || 0 : 0;
+}
+
+function preparePlayerForGame() {
+  const name = getPlayerName();
+  if (!name) {
+    gameStatus.textContent = "Please enter a player name before starting.";
+    playerNameInput.focus();
+    return false;
+  }
+
+  playerCounts[name] = (playerCounts[name] || 0) + 1;
+  savePlayerCounts();
+  localStorage.setItem(PLAYER_NAME_KEY, name);
+  game.playerName = name;
+  game.playerPlayCount = playerCounts[name];
+  updatePlayerCountDisplay();
+  return true;
 }
 
 function getSpeedLevel() {
@@ -113,6 +175,8 @@ function resetGame() {
   game.running = false;
   game.over = false;
   game.gameId = `game_${Date.now()}`;
+  game.playerName = getPlayerName();
+  game.playerPlayCount = playerCounts[game.playerName] || 0;
   game.speedLevel = getSpeedLevel();
   game.flapPower = getFlapPower();
   game.frame = 0;
@@ -132,7 +196,12 @@ function resetGame() {
 }
 
 function startGame() {
+  if (!preparePlayerForGame()) {
+    return;
+  }
   resetGame();
+  game.playerName = getPlayerName();
+  game.playerPlayCount = playerCounts[game.playerName] || 1;
   game.running = true;
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
@@ -266,6 +335,9 @@ function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathRe
   const pipe = getNextPipe();
   const row = {
     game_id: game.gameId,
+    player_name: game.playerName,
+    player_play_count: game.playerPlayCount,
+    device_id: deviceId,
     time: time.toFixed(3),
     frame: game.frame,
     speed_level: game.speedLevel,
@@ -420,6 +492,9 @@ function drawHud() {
   ctx.font = "500 14px system-ui";
   ctx.fillText(`Speed: ${game.speedLevel}`, 28, 64);
   ctx.fillText(`Flap: ${game.flapPower}`, 28, 82);
+  if (game.playerName) {
+    ctx.fillText(`${game.playerName} #${game.playerPlayCount}`, 28, 100);
+  }
 
   if (!game.running && !game.over) {
     drawCenterText("Press Start", "Space / click / touch makes the bird fly");
@@ -444,6 +519,9 @@ function drawCenterText(title, subtitle) {
 function exportCsv() {
   const headers = [
     "game_id",
+    "player_name",
+    "player_play_count",
+    "device_id",
     "time",
     "frame",
     "speed_level",
@@ -484,14 +562,64 @@ function clearData() {
     return;
   }
   allLogs = [];
+  playerCounts = {};
+  savePlayerCounts();
+  updatePlayerCountDisplay();
+  localStorage.setItem(UPLOADED_ROWS_KEY, "0");
   saveLogs();
   gameStatus.textContent = "Saved data cleared.";
+}
+
+function saveEndpoint() {
+  const endpoint = uploadEndpointInput.value.trim();
+  localStorage.setItem(UPLOAD_ENDPOINT_KEY, endpoint);
+  localStorage.setItem(UPLOADED_ROWS_KEY, "0");
+  uploadStatus.textContent = endpoint ? "Upload URL saved. Future uploads will use this URL." : "Upload URL cleared.";
+}
+
+async function uploadData() {
+  const endpoint = uploadEndpointInput.value.trim();
+  if (!endpoint) {
+    uploadStatus.textContent = "Paste and save an upload endpoint first.";
+    return;
+  }
+
+  const uploadedRows = Number(localStorage.getItem(UPLOADED_ROWS_KEY) || 0);
+  const rowsToUpload = allLogs.slice(uploadedRows);
+  if (!rowsToUpload.length) {
+    uploadStatus.textContent = "No new rows to upload.";
+    return;
+  }
+
+  const payload = {
+    device_id: deviceId,
+    uploaded_at: new Date().toISOString(),
+    rows: rowsToUpload,
+  };
+
+  uploadStatus.textContent = `Uploading ${rowsToUpload.length} rows...`;
+  try {
+    // no-cors keeps this simple for Google Apps Script web apps used by students.
+    await fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+    localStorage.setItem(UPLOADED_ROWS_KEY, String(allLogs.length));
+    uploadStatus.textContent = `Upload sent: ${rowsToUpload.length} new rows.`;
+  } catch {
+    uploadStatus.textContent = "Upload failed. Check the endpoint URL and internet connection.";
+  }
 }
 
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", restartGame);
 exportButton.addEventListener("click", exportCsv);
 clearButton.addEventListener("click", clearData);
+saveEndpointButton.addEventListener("click", saveEndpoint);
+uploadButton.addEventListener("click", uploadData);
+playerNameInput.addEventListener("input", updatePlayerCountDisplay);
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   flap();
@@ -503,5 +631,8 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+playerNameInput.value = localStorage.getItem(PLAYER_NAME_KEY) || "";
+uploadEndpointInput.value = localStorage.getItem(UPLOAD_ENDPOINT_KEY) || "";
+updatePlayerCountDisplay();
 resetGame();
 saveLogs();

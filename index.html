@@ -46,6 +46,13 @@
           <section>
             <p class="eyebrow">Speed mode</p>
             <h2>Before Start</h2>
+            <label class="text-field">
+              Player Name
+              <input id="playerNameInput" type="text" autocomplete="name" placeholder="Example: Amy" />
+            </label>
+            <p class="player-note">
+              This player has played <strong id="playerPlayCount">0</strong> saved rounds on this browser.
+            </p>
             <div class="speed-options" role="group" aria-label="Speed level">
               <label><input type="radio" name="speed" value="slow" /> Slow</label>
               <label><input type="radio" name="speed" value="normal" checked /> Normal</label>
@@ -68,6 +75,20 @@
               <div><strong id="frameValue">0</strong><span>Frames</span></div>
               <div><strong id="savedRowsValue">0</strong><span>Saved rows</span></div>
             </div>
+          </section>
+
+          <section>
+            <p class="eyebrow">Cloud upload</p>
+            <h2>Cross-device Data</h2>
+            <label class="text-field">
+              Upload Endpoint
+              <input id="uploadEndpointInput" type="url" placeholder="Paste Google Apps Script Web App URL" />
+            </label>
+            <div class="upload-row">
+              <button id="saveEndpointButton">Save URL</button>
+              <button id="uploadButton">Upload Data</button>
+            </div>
+            <p class="upload-status" id="uploadStatus">Optional: upload saved rows to one Google Sheet.</p>
           </section>
 
           <section>
