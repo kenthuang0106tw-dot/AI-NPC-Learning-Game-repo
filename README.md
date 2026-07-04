@@ -15,10 +15,11 @@ Stage 1 MVP includes the game, data collection, CSV export, and a game-over dash
 Open `index.html` in a browser, or use the GitHub Pages link.
 
 1. Choose a speed level: `Slow`, `Normal`, or `Fast`.
-2. Press `Start`.
-3. Press `Space`, click the mouse, or tap the phone screen to make the bird fly upward.
-4. Avoid the pipes and the ground.
-5. After game over, read the dashboard or export CSV.
+2. Choose `Flap Power`. Use `High` for easier first-time play.
+3. Press `Start`.
+4. Press `Space`, click the mouse, or tap the phone screen to make the bird fly upward.
+5. Avoid the pipes and the ground.
+6. After game over, read the dashboard or export CSV.
 
 The game is designed so a new player can understand it in less than 10 seconds.
 
@@ -30,6 +31,7 @@ Every frame records one row:
 - `time`
 - `frame`
 - `speed_level`
+- `flap_power`
 - `bird_y`
 - `bird_vy`
 - `pipe_x`

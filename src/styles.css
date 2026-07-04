@@ -174,12 +174,25 @@ h2 {
   border-bottom: 0;
 }
 
-.speed-options {
+.speed-options,
+.flap-options {
   display: grid;
   gap: 8px;
 }
 
-.speed-options label {
+.flap-options {
+  margin-top: 14px;
+}
+
+.setting-label {
+  margin: 4px 0 0;
+  color: #607487;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.speed-options label,
+.flap-options label {
   display: flex;
   align-items: center;
   gap: 8px;

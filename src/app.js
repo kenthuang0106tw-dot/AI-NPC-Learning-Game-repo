@@ -17,6 +17,12 @@ const SPEED_SETTINGS = {
   fast: { gravity: 0.52, flap: -8.4, pipeSpeed: 3.6 },
 };
 
+const FLAP_POWER = {
+  low: 0.9,
+  normal: 1,
+  high: 1.18,
+};
+
 const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
 const startButton = document.querySelector("#startButton");
@@ -24,6 +30,7 @@ const restartButton = document.querySelector("#restartButton");
 const exportButton = document.querySelector("#exportButton");
 const clearButton = document.querySelector("#clearButton");
 const speedInputs = document.querySelectorAll("input[name='speed']");
+const flapPowerInputs = document.querySelectorAll("input[name='flapPower']");
 
 const gameStatus = document.querySelector("#gameStatus");
 const scoreValue = document.querySelector("#scoreValue");
@@ -57,6 +64,7 @@ const game = {
   score: 0,
   lastClickTime: null,
   deathReason: "none",
+  flapPower: "high",
 };
 
 function loadLogs() {
@@ -75,6 +83,11 @@ function saveLogs() {
 function getSpeedLevel() {
   const selected = [...speedInputs].find((input) => input.checked);
   return selected ? selected.value : "normal";
+}
+
+function getFlapPower() {
+  const selected = [...flapPowerInputs].find((input) => input.checked);
+  return selected ? selected.value : "high";
 }
 
 function randomGapCenter() {
@@ -101,6 +114,7 @@ function resetGame() {
   game.over = false;
   game.gameId = `game_${Date.now()}`;
   game.speedLevel = getSpeedLevel();
+  game.flapPower = getFlapPower();
   game.frame = 0;
   game.startTime = 0;
   game.lastFrameTime = 0;
@@ -155,7 +169,7 @@ function update(now) {
   let nextPipeDistance = nextPipe ? nextPipe.x - BIRD_X : "";
 
   if (isClick) {
-    game.birdVy = settings.flap;
+    game.birdVy = settings.flap * FLAP_POWER[game.flapPower];
     clickInterval = game.lastClickTime === null ? "" : ((now - game.lastClickTime) / 1000).toFixed(3);
     game.lastClickTime = now;
     errorToCenter = nextPipe ? (game.birdY - nextPipe.gapCenter).toFixed(2) : "";
@@ -255,6 +269,7 @@ function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathRe
     time: time.toFixed(3),
     frame: game.frame,
     speed_level: game.speedLevel,
+    flap_power: game.flapPower,
     bird_y: game.birdY.toFixed(2),
     bird_vy: game.birdVy.toFixed(2),
     pipe_x: pipe.x.toFixed(2),
@@ -404,6 +419,7 @@ function drawHud() {
   ctx.fillText(`Score: ${game.score}`, 28, 42);
   ctx.font = "500 14px system-ui";
   ctx.fillText(`Speed: ${game.speedLevel}`, 28, 64);
+  ctx.fillText(`Flap: ${game.flapPower}`, 28, 82);
 
   if (!game.running && !game.over) {
     drawCenterText("Press Start", "Space / click / touch makes the bird fly");
@@ -431,6 +447,7 @@ function exportCsv() {
     "time",
     "frame",
     "speed_level",
+    "flap_power",
     "bird_y",
     "bird_vy",
     "pipe_x",
