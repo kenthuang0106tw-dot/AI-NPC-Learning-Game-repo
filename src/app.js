@@ -70,6 +70,7 @@ let clickEvents = [];
 let passEffects = [];
 let audioContext = null;
 let audioUnlocked = false;
+let htmlAudio = null;
 const deviceId = getDeviceId();
 
 const game = {
@@ -237,8 +238,9 @@ function enableSound() {
   unlockAudio();
   audioUnlocked = true;
   soundButton.textContent = "Sound On";
-  gameStatus.textContent = "Sound on. Tap the game to play.";
+  gameStatus.textContent = "Sound test played. If silent, check phone silent mode and volume.";
   playTone("score");
+  playHtmlBeep();
   window.setTimeout(() => playTone("flap"), 140);
 }
 
@@ -383,6 +385,69 @@ function unlockAudio() {
     soundButton.textContent = "Sound On";
   } catch {
     audioUnlocked = false;
+  }
+}
+
+function getHtmlAudio() {
+  if (!htmlAudio) {
+    htmlAudio = new Audio(createBeepWavDataUrl());
+    htmlAudio.preload = "auto";
+    htmlAudio.volume = 1;
+  }
+  return htmlAudio;
+}
+
+function playHtmlBeep() {
+  try {
+    const audio = getHtmlAudio();
+    audio.currentTime = 0;
+    const result = audio.play();
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch {
+    // Fallback audio is optional.
+  }
+}
+
+function createBeepWavDataUrl() {
+  const sampleRate = 8000;
+  const duration = 0.16;
+  const frequency = 660;
+  const samples = Math.floor(sampleRate * duration);
+  const bytesPerSample = 2;
+  const dataSize = samples * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+  for (let i = 0; i < samples; i += 1) {
+    const fade = 1 - i / samples;
+    const value = Math.sin((i / sampleRate) * frequency * Math.PI * 2) * fade * 0.65;
+    view.setInt16(44 + i * 2, value * 32767, true);
+  }
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return `data:audio/wav;base64,${btoa(binary)}`;
+}
+
+function writeAscii(view, offset, text) {
+  for (let i = 0; i < text.length; i += 1) {
+    view.setUint8(offset + i, text.charCodeAt(i));
   }
 }
 
@@ -919,7 +984,7 @@ async function uploadCompletedGame() {
   }
 
   game.finalUploadRows = completedRows;
-  const deathUploaded = await uploadRows([lastRow], {
+  const firstDeathUpload = await uploadRows([lastRow], {
     automatic: true,
     silentWhenMissing: true,
     statusMessage: `Uploading death reason: ${lastRow.death_reason}...`,
@@ -927,7 +992,7 @@ async function uploadCompletedGame() {
     keepalive: true,
   });
 
-  if (!deathUploaded) {
+  if (!firstDeathUpload) {
     return;
   }
 
@@ -943,6 +1008,17 @@ async function uploadCompletedGame() {
     if (!ok) {
       return;
     }
+  }
+
+  const finalDeathUpload = await uploadRows([lastRow], {
+    automatic: true,
+    silentWhenMissing: true,
+    statusMessage: `Confirming final death reason: ${lastRow.death_reason}...`,
+    successMessage: `Final death reason confirmed: ${lastRow.death_reason}.`,
+    keepalive: true,
+  });
+  if (!finalDeathUpload) {
+    return;
   }
 
   localStorage.setItem(UPLOADED_ROWS_KEY, String(allLogs.length));
