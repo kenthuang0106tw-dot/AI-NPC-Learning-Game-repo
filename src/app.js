@@ -17,7 +17,6 @@ const GROUND_Y = CANVAS_HEIGHT - 54;
 const GAP_SIZE = 150;
 const PIPE_WIDTH = 70;
 const PIPE_SPACING = 260;
-const CHECKPOINT_UPLOAD_FRAMES = 180;
 const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
@@ -68,6 +67,7 @@ let currentGameLogs = [];
 let clickEvents = [];
 let passEffects = [];
 let audioContext = null;
+let audioUnlocked = false;
 const deviceId = getDeviceId();
 
 const game = {
@@ -87,10 +87,6 @@ const game = {
   lastClickTime: null,
   deathReason: "none",
   flapPower: FIXED_FLAP_POWER,
-  uploadedFrameCount: 0,
-  uploadingToFrame: 0,
-  lastCheckpointFrame: 0,
-  isUploadingRound: false,
   achievements: [],
   previousHeightVariation: null,
   finalUploadRows: [],
@@ -204,10 +200,6 @@ function resetGame() {
   game.score = 0;
   game.lastClickTime = null;
   game.deathReason = "none";
-  game.uploadedFrameCount = 0;
-  game.uploadingToFrame = 0;
-  game.lastCheckpointFrame = 0;
-  game.isUploadingRound = false;
   game.achievements = [];
   game.previousHeightVariation = Number(localStorage.getItem(LAST_HEIGHT_VARIATION_KEY) || "") || null;
   game.finalUploadRows = [];
@@ -220,6 +212,7 @@ function resetGame() {
 }
 
 function startGame() {
+  unlockAudio();
   if (!preparePlayerForGame()) {
     return;
   }
@@ -230,7 +223,7 @@ function startGame() {
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "Playing. Tap once to fly upward.";
-  setUploadStatus("Ready. Backups upload while playing.");
+  setUploadStatus("Ready. Completed game uploads after death.");
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -239,6 +232,7 @@ function restartGame() {
 }
 
 function startOrFlap() {
+  unlockAudio();
   if (!game.running) {
     startGame();
   }
@@ -308,11 +302,6 @@ function update(now) {
     });
   }
 
-  if (!isDead && game.frame - game.lastCheckpointFrame >= CHECKPOINT_UPLOAD_FRAMES) {
-    game.lastCheckpointFrame = game.frame;
-    uploadCurrentRound();
-  }
-
   drawScene();
   updateLiveMetrics(elapsedSeconds);
 
@@ -367,6 +356,24 @@ function addAchievement(name) {
   }
 }
 
+function unlockAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+    if (!audioContext) {
+      audioContext = new AudioContextClass();
+    }
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
+    audioUnlocked = true;
+  } catch {
+    audioUnlocked = false;
+  }
+}
+
 function playTone(type) {
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -376,13 +383,19 @@ function playTone(type) {
     if (!audioContext) {
       audioContext = new AudioContextClass();
     }
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
+    if (!audioUnlocked && type !== "hit") {
+      audioUnlocked = true;
+    }
     const now = audioContext.currentTime;
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
     const tone = {
-      flap: { frequency: 520, duration: 0.07, volume: 0.035, type: "sine" },
-      score: { frequency: 740, duration: 0.12, volume: 0.045, type: "triangle" },
-      hit: { frequency: 150, duration: 0.18, volume: 0.06, type: "sawtooth" },
+      flap: { frequency: 620, duration: 0.08, volume: 0.12, type: "sine" },
+      score: { frequency: 880, duration: 0.14, volume: 0.14, type: "triangle" },
+      hit: { frequency: 180, duration: 0.22, volume: 0.16, type: "sawtooth" },
     }[type];
     if (!tone) {
       return;
@@ -487,7 +500,7 @@ function endGame(elapsedSeconds) {
   gameStatus.textContent = `Game over: ${game.deathReason}`;
   playTone("hit");
   drawScene();
-  uploadCurrentRound({ final: true });
+  uploadCompletedGame();
 }
 
 function ensureDeathFrameLogged(elapsedSeconds) {
@@ -885,47 +898,25 @@ function getUploadEndpoint() {
   );
 }
 
-async function uploadCurrentRound({ final = false } = {}) {
-  if (game.isUploadingRound && !final) {
+async function uploadCompletedGame() {
+  const rowsToUpload = currentGameLogs.slice();
+  const lastRow = rowsToUpload[rowsToUpload.length - 1];
+  if (!lastRow || lastRow.is_dead !== 1 || !lastRow.death_reason || lastRow.death_reason === "none") {
+    setUploadStatus("Death row missing locally. Upload stopped.");
     return;
   }
 
-  const uploadToFrame = currentGameLogs.length;
-  const startIndex = final ? Math.max(game.uploadedFrameCount, game.uploadingToFrame) : game.uploadedFrameCount;
-  let rowsToUpload = currentGameLogs.slice(startIndex, uploadToFrame);
-  const lastRow = currentGameLogs[currentGameLogs.length - 1];
-  if (final && lastRow && lastRow.is_dead === 1 && !rowsToUpload.includes(lastRow)) {
-    rowsToUpload = rowsToUpload.concat(lastRow);
-  }
-  if (!rowsToUpload.length) {
-    return;
-  }
-
-  if (!final) {
-    game.isUploadingRound = true;
-    game.uploadingToFrame = uploadToFrame;
-  }
-  const uploadedThrough = final ? allLogs.length : null;
-  const ok = await uploadRows(rowsToUpload, {
+  game.finalUploadRows = rowsToUpload;
+  await uploadRows(rowsToUpload, {
     automatic: true,
     silentWhenMissing: true,
-    uploadedThrough,
-    checkpoint: !final,
+    uploadedThrough: allLogs.length,
   });
-
-  if (ok) {
-    game.uploadedFrameCount = Math.max(game.uploadedFrameCount, uploadToFrame);
-  }
-
-  if (!final) {
-    game.isUploadingRound = false;
-    game.uploadingToFrame = 0;
-  }
 }
 
 async function uploadRows(
   rowsToUpload,
-  { automatic = false, silentWhenMissing = false, uploadedThrough = null, checkpoint = false } = {}
+  { automatic = false, silentWhenMissing = false, uploadedThrough = null } = {}
 ) {
   const endpoint = getUploadEndpoint();
   if (!endpoint) {
@@ -950,28 +941,25 @@ async function uploadRows(
     rows: rowsToUpload,
   };
 
-  const uploadingMessage = checkpoint
-    ? `Backup uploading ${rowsToUpload.length} rows...`
-    : automatic
-      ? `Auto-uploading ${rowsToUpload.length} rows...`
-      : `Uploading ${rowsToUpload.length} rows...`;
+  const uploadingMessage = automatic
+    ? `Auto-uploading completed game: ${rowsToUpload.length} rows...`
+    : `Uploading ${rowsToUpload.length} rows...`;
   setUploadStatus(uploadingMessage);
   try {
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
+      keepalive: true,
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
     if (uploadedThrough !== null) {
       localStorage.setItem(UPLOADED_ROWS_KEY, String(uploadedThrough));
     }
-    const sentMessage = checkpoint
-      ? `Backup sent: ${rowsToUpload.length} rows.`
-      : automatic
-        ? `Auto-upload sent: ${rowsToUpload.length} new rows.`
-        : `Upload sent: ${rowsToUpload.length} new rows.`;
+    const sentMessage = automatic
+      ? `Completed game uploaded: ${rowsToUpload.length} rows.`
+      : `Upload sent: ${rowsToUpload.length} new rows.`;
     setUploadStatus(sentMessage);
     if (automatic && game.over) {
       gameStatus.textContent = `Game over: ${game.deathReason}. Upload sent.`;
@@ -1020,7 +1008,7 @@ document.addEventListener("keydown", (event) => {
 
 playerNameInput.value = "";
 uploadEndpointInput.value = localStorage.getItem(UPLOAD_ENDPOINT_KEY) || DEFAULT_UPLOAD_ENDPOINT;
-setUploadStatus("Ready. Finished games upload automatically.");
+setUploadStatus("Ready. Completed games upload automatically.");
 updatePlayerCountDisplay();
 resetGame();
 saveLogs();

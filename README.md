@@ -135,7 +135,7 @@ function doPost(e) {
 6. Set `Who has access` to `Anyone`.
 7. Copy the Web App URL.
 8. Paste that URL into the game's `Upload Endpoint` box and press `Save URL`.
-9. After that, gameplay checkpoints upload while playing, and the final rows upload after game over.
+9. After that, each completed game uploads automatically after death.
 
 Each device can use the same upload URL, so all data goes into the same Google Sheet.
 
