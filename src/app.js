@@ -22,7 +22,7 @@ const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 6;
-const UPLOAD_CHUNK_SIZE = 120;
+const UPLOAD_CHUNK_SIZE = 80;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -1455,19 +1455,24 @@ async function uploadCompletedGame() {
   }
 
   game.finalUploadRows = completedRows;
-  const completedGameUpload = await uploadRows(completedRows, {
-    automatic: true,
-    silentWhenMissing: true,
-    statusMessage: `Sending complete round: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows...`,
-    successMessage: `Complete round request sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, death reason ${lastRow.death_reason}.`,
-  });
-  if (!completedGameUpload) {
-    return;
+  const chunkCount = Math.ceil(completedRows.length / UPLOAD_CHUNK_SIZE);
+  for (let index = 0; index < completedRows.length; index += UPLOAD_CHUNK_SIZE) {
+    const chunk = completedRows.slice(index, index + UPLOAD_CHUNK_SIZE);
+    const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
+    const ok = await uploadRows(chunk, {
+      automatic: true,
+      silentWhenMissing: true,
+      statusMessage: `Sending complete round ${game.playerName} #${game.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
+      successMessage: `Complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${completedRows.length} rows.`,
+    });
+    if (!ok) {
+      return;
+    }
   }
 
-  setUploadStatus(`Complete round request sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
+  setUploadStatus(`Complete round sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, ${chunkCount} chunk(s).`);
   if (game.over) {
-    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round request sent.`;
+    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round sent.`;
   }
 }
 
