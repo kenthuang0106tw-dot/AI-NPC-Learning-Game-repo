@@ -1125,7 +1125,7 @@ function enqueuePendingUpload(rows) {
     createdAt: new Date().toISOString(),
   });
   savePendingUploads();
-  setUploadStatus(`Saved round locally for verified upload: ${lastRow.player_name} #${lastRow.player_play_count}.`);
+  setUploadStatus(`Saved complete round locally for verified upload: ${lastRow.player_name} #${lastRow.player_play_count}.`);
 }
 
 async function processPendingUploads() {
@@ -1177,8 +1177,8 @@ async function sendPendingUpload(pending) {
     const ok = await uploadRows(chunk, {
       automatic: true,
       silentWhenMissing: true,
-      statusMessage: `Sending pending round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
-      successMessage: `Pending round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
+        statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
+        successMessage: `Pending complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
     });
     if (!ok) {
       return false;
