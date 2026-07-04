@@ -6,6 +6,7 @@ const PLAYER_COUNTS_KEY = "flappy_skill_lab_player_counts_v1";
 const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
 const UPLOAD_ENDPOINT_KEY = "flappy_skill_lab_upload_endpoint_v1";
 const UPLOADED_ROWS_KEY = "flappy_skill_lab_uploaded_rows_v1";
+const LAST_HEIGHT_VARIATION_KEY = "flappy_skill_lab_last_height_variation_v1";
 const DEFAULT_UPLOAD_ENDPOINT =
   "https://script.google.com/macros/s/AKfycby5bcHFz9A9uxOWVfgwbvsANwbBN9pdF5Hi8zXnOgmW8YsucEIjHCFfaf3IW4LK7NX61A/exec";
 const CANVAS_WIDTH = 480;
@@ -19,6 +20,8 @@ const PIPE_SPACING = 260;
 const CHECKPOINT_UPLOAD_FRAMES = 180;
 const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
+const SKIN_PIPES_PER_LEVEL = 30;
+const MAX_BIRD_SKIN_LEVEL = 3;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -53,6 +56,9 @@ const averageError = document.querySelector("#averageError");
 const deathReason = document.querySelector("#deathReason");
 const heightVariation = document.querySelector("#heightVariation");
 const uploadResult = document.querySelector("#uploadResult");
+const encouragementText = document.querySelector("#encouragementText");
+const analysisText = document.querySelector("#analysisText");
+const achievementList = document.querySelector("#achievementList");
 
 let allLogs = loadLogs();
 let playerCounts = loadPlayerCounts();
@@ -60,6 +66,8 @@ let animationId = null;
 let pendingClick = false;
 let currentGameLogs = [];
 let clickEvents = [];
+let passEffects = [];
+let audioContext = null;
 const deviceId = getDeviceId();
 
 const game = {
@@ -80,9 +88,13 @@ const game = {
   deathReason: "none",
   flapPower: FIXED_FLAP_POWER,
   uploadedFrameCount: 0,
+  uploadingToFrame: 0,
   lastCheckpointFrame: 0,
   isUploadingRound: false,
-  needsFinalUpload: false,
+  achievements: [],
+  previousHeightVariation: null,
+  finalUploadRows: [],
+  deathAnimationStarted: 0,
 };
 
 function loadLogs() {
@@ -174,6 +186,7 @@ function resetGame() {
   pendingClick = false;
   currentGameLogs = [];
   clickEvents = [];
+  passEffects = [];
 
   game.running = false;
   game.over = false;
@@ -192,9 +205,13 @@ function resetGame() {
   game.lastClickTime = null;
   game.deathReason = "none";
   game.uploadedFrameCount = 0;
+  game.uploadingToFrame = 0;
   game.lastCheckpointFrame = 0;
   game.isUploadingRound = false;
-  game.needsFinalUpload = false;
+  game.achievements = [];
+  game.previousHeightVariation = Number(localStorage.getItem(LAST_HEIGHT_VARIATION_KEY) || "") || null;
+  game.finalUploadRows = [];
+  game.deathAnimationStarted = 0;
 
   gameStatus.textContent = "Ready. Press Start, Space, click, or tap.";
   updateLiveMetrics(0);
@@ -233,6 +250,7 @@ function flap() {
     return;
   }
   pendingClick = true;
+  playTone("flap");
 }
 
 function update(now) {
@@ -323,7 +341,66 @@ function updateScore() {
     if (!pipe.passed && pipe.x + PIPE_WIDTH < BIRD_X) {
       pipe.passed = true;
       game.score += 1;
+      passEffects.push({ x: BIRD_X + 38, y: game.birdY, age: 0 });
+      playTone("score");
+      checkAchievements();
     }
+  }
+}
+
+function getBirdSkinLevel() {
+  return Math.min(MAX_BIRD_SKIN_LEVEL, Math.floor(game.score / SKIN_PIPES_PER_LEVEL) + 1);
+}
+
+function checkAchievements() {
+  if (game.score >= 1) {
+    addAchievement("First Flight");
+  }
+  if (game.score >= 50) {
+    addAchievement("Expert");
+  }
+}
+
+function addAchievement(name) {
+  if (!game.achievements.includes(name)) {
+    game.achievements.push(name);
+  }
+}
+
+function playTone(type) {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+    if (!audioContext) {
+      audioContext = new AudioContextClass();
+    }
+    const now = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const tone = {
+      flap: { frequency: 520, duration: 0.07, volume: 0.035, type: "sine" },
+      score: { frequency: 740, duration: 0.12, volume: 0.045, type: "triangle" },
+      hit: { frequency: 150, duration: 0.18, volume: 0.06, type: "sawtooth" },
+    }[type];
+    if (!tone) {
+      return;
+    }
+
+    oscillator.type = tone.type;
+    oscillator.frequency.setValueAtTime(tone.frequency, now);
+    if (type === "hit") {
+      oscillator.frequency.exponentialRampToValueAtTime(55, now + tone.duration);
+    }
+    gain.gain.setValueAtTime(tone.volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + tone.duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + tone.duration);
+  } catch {
+    // Audio is optional feedback and should never interrupt the experiment.
   }
 }
 
@@ -392,6 +469,7 @@ function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathRe
     click_interval: clickInterval,
     error_to_center: errorToCenter,
     sample_type: sampleType,
+    bird_skin_level: getBirdSkinLevel(),
   };
   currentGameLogs.push(row);
 }
@@ -399,14 +477,34 @@ function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathRe
 function endGame(elapsedSeconds) {
   game.running = false;
   game.over = true;
+  game.deathAnimationStarted = performance.now();
   window.cancelAnimationFrame(animationId);
   animationId = null;
+  ensureDeathFrameLogged(elapsedSeconds);
   allLogs = allLogs.concat(currentGameLogs);
   saveLogs();
   showDashboard(elapsedSeconds);
   gameStatus.textContent = `Game over: ${game.deathReason}`;
+  playTone("hit");
   drawScene();
   uploadCurrentRound({ final: true });
+}
+
+function ensureDeathFrameLogged(elapsedSeconds) {
+  const lastRow = currentGameLogs[currentGameLogs.length - 1];
+  if (lastRow && lastRow.is_dead === 1 && lastRow.death_reason === game.deathReason) {
+    return;
+  }
+
+  logFrame({
+    time: elapsedSeconds,
+    isClick: false,
+    clickInterval: "",
+    errorToCenter: "",
+    isDead: true,
+    deathReason: game.deathReason,
+    sampleType: "death",
+  });
 }
 
 function resetDashboard() {
@@ -417,6 +515,9 @@ function resetDashboard() {
   deathReason.textContent = "--";
   heightVariation.textContent = "--";
   uploadResult.textContent = uploadStatus.textContent || "--";
+  encouragementText.textContent = "Play a round to see feedback.";
+  analysisText.textContent = "Analysis appears only after game over.";
+  achievementList.innerHTML = "";
 }
 
 function showDashboard(elapsedSeconds) {
@@ -426,13 +527,73 @@ function showDashboard(elapsedSeconds) {
     .filter((value) => typeof value === "number")
     .map((value) => Math.abs(value));
   const heights = currentGameLogs.map((row) => Number(row.bird_y));
+  const heightStd = heights.length ? standardDeviation(heights) : null;
+  const clicksPerSecondValue = elapsedSeconds > 0 ? clicks / elapsedSeconds : 0;
+  if (elapsedSeconds >= 12 && heightStd !== null && heightStd <= 85) {
+    addAchievement("Stable Pilot");
+  }
 
   survivalTime.textContent = `${elapsedSeconds.toFixed(2)}s`;
   finalScore.textContent = game.score;
-  clicksPerSecond.textContent = elapsedSeconds > 0 ? (clicks / elapsedSeconds).toFixed(2) : "0.00";
+  clicksPerSecond.textContent = clicksPerSecondValue.toFixed(2);
   averageError.textContent = absErrors.length ? average(absErrors).toFixed(2) : "--";
   deathReason.textContent = game.deathReason;
-  heightVariation.textContent = heights.length ? standardDeviation(heights).toFixed(2) : "--";
+  heightVariation.textContent = heightStd !== null ? heightStd.toFixed(2) : "--";
+  encouragementText.textContent = getEncouragement();
+  analysisText.textContent = getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd });
+  renderAchievements();
+  if (heightStd !== null) {
+    localStorage.setItem(LAST_HEIGHT_VARIATION_KEY, String(heightStd));
+  }
+}
+
+function getEncouragement() {
+  if (game.score >= 50) {
+    return "Excellent flight. You reached expert territory.";
+  }
+  if (game.score >= 20) {
+    return "Nice control. You kept the bird alive through a long run.";
+  }
+  if (game.score >= 1) {
+    return "Good start. Try to keep the bird closer to the pipe center.";
+  }
+  return "First flights are data too. Try a steadier tap rhythm next round.";
+}
+
+function getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd }) {
+  const notes = [];
+  if (clicksPerSecondValue > 2.4) {
+    notes.push("Your click rate was high.");
+  } else if (clicksPerSecondValue < 1.0) {
+    notes.push("Your click rate was low.");
+  } else {
+    notes.push("Your click rhythm was moderate.");
+  }
+
+  if (absErrors.length && average(absErrors) > 80) {
+    notes.push("Your height was often far from the pipe center.");
+  } else if (absErrors.length) {
+    notes.push("Your height stayed closer to the pipe center.");
+  }
+
+  if (heightStd !== null && game.previousHeightVariation !== null) {
+    if (heightStd < game.previousHeightVariation) {
+      notes.push("Your height control was steadier than last round.");
+    } else if (heightStd > game.previousHeightVariation) {
+      notes.push("Your height control varied more than last round.");
+    }
+  }
+
+  return notes.join(" ");
+}
+
+function renderAchievements() {
+  achievementList.innerHTML = "";
+  for (const achievement of game.achievements) {
+    const item = document.createElement("li");
+    item.textContent = achievement;
+    achievementList.appendChild(item);
+  }
 }
 
 function average(values) {
@@ -456,21 +617,57 @@ function drawScene() {
   ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   drawBackground();
   drawPipes();
+  drawPassEffects();
   drawBird();
   drawGround();
   drawHud();
 }
 
 function drawBackground() {
+  const style = getBackgroundStyle();
   const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-  gradient.addColorStop(0, "#8ed8ff");
-  gradient.addColorStop(1, "#eaf7ff");
+  gradient.addColorStop(0, style.skyTop);
+  gradient.addColorStop(1, style.skyBottom);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
-  drawCloud(90, 90);
-  drawCloud(330, 150);
+  if (style.stars) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.86)";
+    for (let i = 0; i < 22; i += 1) {
+      const x = (i * 83 + 31) % CANVAS_WIDTH;
+      const y = 32 + ((i * 47) % 210);
+      ctx.fillRect(x, y, i % 3 === 0 ? 3 : 2, i % 3 === 0 ? 3 : 2);
+    }
+  } else {
+    ctx.fillStyle = style.cloudColor;
+    drawCloud(90, 90);
+    drawCloud(330, 150);
+  }
+}
+
+function getBackgroundStyle() {
+  if (game.score >= 50) {
+    return {
+      skyTop: "#172554",
+      skyBottom: "#4c1d95",
+      cloudColor: "rgba(255, 255, 255, 0.35)",
+      stars: true,
+    };
+  }
+  if (game.score >= 20) {
+    return {
+      skyTop: "#f9a03f",
+      skyBottom: "#ffd6a5",
+      cloudColor: "rgba(255, 255, 255, 0.58)",
+      stars: false,
+    };
+  }
+  return {
+    skyTop: "#8ed8ff",
+    skyBottom: "#eaf7ff",
+    cloudColor: "rgba(255, 255, 255, 0.72)",
+    stars: false,
+  };
 }
 
 function drawCloud(x, y) {
@@ -479,6 +676,22 @@ function drawCloud(x, y) {
   ctx.arc(x + 24, y - 8, 28, 0, Math.PI * 2);
   ctx.arc(x + 56, y, 20, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawPassEffects() {
+  passEffects = passEffects.filter((effect) => effect.age < 28);
+  for (const effect of passEffects) {
+    const progress = effect.age / 28;
+    ctx.save();
+    ctx.globalAlpha = 1 - progress;
+    ctx.strokeStyle = "#ffd84d";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(effect.x, effect.y, 12 + progress * 26, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    effect.age += 1;
+  }
 }
 
 function drawPipes() {
@@ -495,13 +708,46 @@ function drawPipes() {
 }
 
 function drawBird() {
+  const skinLevel = getBirdSkinLevel();
+  const wingLift = Math.sin(game.frame * 0.38) * 5;
+  const deathTilt = game.over ? 0.85 : 0;
   ctx.save();
   ctx.translate(BIRD_X, game.birdY);
-  ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)));
-  ctx.fillStyle = "#ffd84d";
+  ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)) + deathTilt);
+  ctx.fillStyle = skinLevel >= 3 ? "#fef3c7" : "#ffd84d";
   ctx.beginPath();
   ctx.arc(0, 0, BIRD_RADIUS, 0, Math.PI * 2);
   ctx.fill();
+
+  ctx.fillStyle = skinLevel >= 2 ? "#60a5fa" : "#f6c343";
+  ctx.beginPath();
+  ctx.ellipse(-8, 6 + wingLift, 9, 5, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (skinLevel >= 2) {
+    ctx.fillStyle = "#2563eb";
+    ctx.beginPath();
+    ctx.arc(-2, -12, 12, Math.PI, 0);
+    ctx.fill();
+  }
+
+  if (skinLevel >= 3) {
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(5, -7, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.moveTo(-11, -23);
+    ctx.lineTo(-7, -15);
+    ctx.lineTo(-16, -18);
+    ctx.lineTo(-6, -20);
+    ctx.lineTo(-12, -27);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   ctx.fillStyle = "#ff9f1c";
   ctx.beginPath();
   ctx.moveTo(12, -2);
@@ -514,6 +760,18 @@ function drawBird() {
   ctx.arc(6, -7, 3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  if (game.over) {
+    const age = Math.min(1, (performance.now() - game.deathAnimationStarted) / 500);
+    ctx.save();
+    ctx.globalAlpha = 1 - age;
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(BIRD_X, game.birdY, BIRD_RADIUS + 10 + age * 30, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawGround() {
@@ -578,6 +836,7 @@ function exportCsv() {
     "click_interval",
     "error_to_center",
     "sample_type",
+    "bird_skin_level",
   ];
   const csvRows = [
     headers.join(","),
@@ -627,20 +886,25 @@ function getUploadEndpoint() {
 }
 
 async function uploadCurrentRound({ final = false } = {}) {
-  if (game.isUploadingRound) {
-    if (final) {
-      game.needsFinalUpload = true;
-    }
+  if (game.isUploadingRound && !final) {
     return;
   }
 
   const uploadToFrame = currentGameLogs.length;
-  const rowsToUpload = currentGameLogs.slice(game.uploadedFrameCount, uploadToFrame);
+  const startIndex = final ? Math.max(game.uploadedFrameCount, game.uploadingToFrame) : game.uploadedFrameCount;
+  let rowsToUpload = currentGameLogs.slice(startIndex, uploadToFrame);
+  const lastRow = currentGameLogs[currentGameLogs.length - 1];
+  if (final && lastRow && lastRow.is_dead === 1 && !rowsToUpload.includes(lastRow)) {
+    rowsToUpload = rowsToUpload.concat(lastRow);
+  }
   if (!rowsToUpload.length) {
     return;
   }
 
-  game.isUploadingRound = true;
+  if (!final) {
+    game.isUploadingRound = true;
+    game.uploadingToFrame = uploadToFrame;
+  }
   const uploadedThrough = final ? allLogs.length : null;
   const ok = await uploadRows(rowsToUpload, {
     automatic: true,
@@ -650,13 +914,12 @@ async function uploadCurrentRound({ final = false } = {}) {
   });
 
   if (ok) {
-    game.uploadedFrameCount = uploadToFrame;
+    game.uploadedFrameCount = Math.max(game.uploadedFrameCount, uploadToFrame);
   }
 
-  game.isUploadingRound = false;
-  if (game.needsFinalUpload) {
-    game.needsFinalUpload = false;
-    uploadCurrentRound({ final: true });
+  if (!final) {
+    game.isUploadingRound = false;
+    game.uploadingToFrame = 0;
   }
 }
 

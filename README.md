@@ -25,6 +25,8 @@ Player name is required each time the page is opened. During the same page sessi
 
 The game is designed so a new player can understand it in less than 10 seconds.
 
+Visual upgrades are feedback only. Background color changes, bird skins, sound effects, animations, and achievements do not change gravity, pipe speed, pipe gap, pipe distance, collision size, or jump force.
+
 ## Data Collected
 
 To keep the Google Sheet small, the game records one row every 5 frames. Click frames and death frames are always recorded, even if they are not on a 5-frame sample.
@@ -48,6 +50,7 @@ To keep the Google Sheet small, the game records one row every 5 frames. Click f
 - `is_dead`
 - `death_reason`
 - `sample_type`
+- `bird_skin_level`
 
 For click frames, the row also records:
 
@@ -60,6 +63,8 @@ All rows are saved in browser `localStorage`, so restarting the game does not de
 `player_play_count` is important. Use it to compare a player's early rounds and later rounds instead of judging skill only by score.
 
 `flap_power` is fixed at `normal` so the main experimental variables are speed level and player practice count.
+
+`bird_skin_level` is visual only. It changes every 30 pipes and does not change bird size, collision, physics, speed, or jump force.
 
 ## Export CSV
 
@@ -104,6 +109,7 @@ const HEADERS = [
   "click_interval",
   "error_to_center",
   "sample_type",
+  "bird_skin_level",
 ];
 
 function doPost(e) {
@@ -147,6 +153,9 @@ After each game, the dashboard shows:
 - average height control error: `average(abs(error_to_center))`
 - death reason
 - bird height variation
+- upload result
+- short encouragement and analysis
+- visual achievements earned that round
 
 These metrics help compare different playing styles.
 

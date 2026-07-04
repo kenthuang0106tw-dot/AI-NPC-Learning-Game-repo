@@ -296,6 +296,44 @@ h2 {
   text-align: right;
 }
 
+.game-over-feedback {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.game-over-feedback p {
+  margin: 0;
+  color: #405366;
+  line-height: 1.45;
+}
+
+.game-over-feedback p:first-child {
+  color: #17202a;
+  font-weight: 900;
+}
+
+.game-over-feedback ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-over-feedback li {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: #e8f7ef;
+  color: #1d6b3a;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
 .research-panel {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
