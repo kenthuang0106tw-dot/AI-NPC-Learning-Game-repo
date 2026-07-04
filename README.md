@@ -124,9 +124,11 @@ function doPost(e) {
 6. Set `Who has access` to `Anyone`.
 7. Copy the Web App URL.
 8. Paste that URL into the game's `Upload Endpoint` box and press `Save URL`.
-9. After playing, press `Upload Data`.
+9. After that, every finished game uploads automatically.
 
 Each device can use the same upload URL, so all data goes into the same Google Sheet.
+
+`Upload Data` is still useful as a backup button. If the internet disconnects during auto-upload, the rows stay saved in the browser and can be uploaded later.
 
 ## Game Over Dashboard
 

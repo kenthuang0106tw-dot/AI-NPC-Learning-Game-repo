@@ -368,6 +368,7 @@ function endGame(elapsedSeconds) {
   showDashboard(elapsedSeconds);
   gameStatus.textContent = `Game over: ${game.deathReason}`;
   drawScene();
+  uploadData({ automatic: true, silentWhenMissing: true });
 }
 
 function resetDashboard() {
@@ -574,12 +575,17 @@ function saveEndpoint() {
   const endpoint = uploadEndpointInput.value.trim();
   localStorage.setItem(UPLOAD_ENDPOINT_KEY, endpoint);
   localStorage.setItem(UPLOADED_ROWS_KEY, "0");
-  uploadStatus.textContent = endpoint ? "Upload URL saved. Future uploads will use this URL." : "Upload URL cleared.";
+  uploadStatus.textContent = endpoint
+    ? "Upload URL saved. Finished games will upload automatically."
+    : "Upload URL cleared.";
 }
 
-async function uploadData() {
+async function uploadData({ automatic = false, silentWhenMissing = false } = {}) {
   const endpoint = uploadEndpointInput.value.trim();
   if (!endpoint) {
+    if (silentWhenMissing) {
+      return;
+    }
     uploadStatus.textContent = "Paste and save an upload endpoint first.";
     return;
   }
@@ -587,6 +593,9 @@ async function uploadData() {
   const uploadedRows = Number(localStorage.getItem(UPLOADED_ROWS_KEY) || 0);
   const rowsToUpload = allLogs.slice(uploadedRows);
   if (!rowsToUpload.length) {
+    if (silentWhenMissing) {
+      return;
+    }
     uploadStatus.textContent = "No new rows to upload.";
     return;
   }
@@ -597,7 +606,10 @@ async function uploadData() {
     rows: rowsToUpload,
   };
 
-  uploadStatus.textContent = `Uploading ${rowsToUpload.length} rows...`;
+  const nextUploadedRows = uploadedRows + rowsToUpload.length;
+  uploadStatus.textContent = automatic
+    ? `Auto-uploading ${rowsToUpload.length} rows...`
+    : `Uploading ${rowsToUpload.length} rows...`;
   try {
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
@@ -606,10 +618,14 @@ async function uploadData() {
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
-    localStorage.setItem(UPLOADED_ROWS_KEY, String(allLogs.length));
-    uploadStatus.textContent = `Upload sent: ${rowsToUpload.length} new rows.`;
+    localStorage.setItem(UPLOADED_ROWS_KEY, String(nextUploadedRows));
+    uploadStatus.textContent = automatic
+      ? `Auto-upload sent: ${rowsToUpload.length} new rows.`
+      : `Upload sent: ${rowsToUpload.length} new rows.`;
   } catch {
-    uploadStatus.textContent = "Upload failed. Check the endpoint URL and internet connection.";
+    uploadStatus.textContent = automatic
+      ? "Auto-upload failed. Data is still saved locally; use Upload Data to try again."
+      : "Upload failed. Check the endpoint URL and internet connection.";
   }
 }
 
