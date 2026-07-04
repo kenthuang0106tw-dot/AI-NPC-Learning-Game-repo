@@ -23,7 +23,6 @@ const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 6;
 const UPLOAD_CHUNK_SIZE = 120;
-const BEACON_MAX_BYTES = 60000;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -1459,16 +1458,16 @@ async function uploadCompletedGame() {
   const completedGameUpload = await uploadRows(completedRows, {
     automatic: true,
     silentWhenMissing: true,
-    statusMessage: `Queueing complete round: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows...`,
-    successMessage: `Complete round queued: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, death reason ${lastRow.death_reason}.`,
+    statusMessage: `Sending complete round: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows...`,
+    successMessage: `Complete round request sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows, death reason ${lastRow.death_reason}.`,
   });
   if (!completedGameUpload) {
     return;
   }
 
-  setUploadStatus(`Complete round queued: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
+  setUploadStatus(`Complete round request sent: ${game.playerName} #${game.playerPlayCount}, ${completedRows.length} rows.`);
   if (game.over) {
-    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round queued.`;
+    gameStatus.textContent = `Game over: ${game.deathReason}. Complete round request sent.`;
   }
 }
 
@@ -1478,14 +1477,6 @@ function buildUploadPayload(rowsToUpload) {
     uploaded_at: new Date().toISOString(),
     rows: rowsToUpload,
   };
-}
-
-function canUseBeacon(body) {
-  return (
-    typeof navigator !== "undefined" &&
-    typeof navigator.sendBeacon === "function" &&
-    body.length <= BEACON_MAX_BYTES
-  );
 }
 
 async function uploadRows(
@@ -1522,21 +1513,6 @@ async function uploadRows(
     : `Uploading ${rowsToUpload.length} rows...`);
   setUploadStatus(uploadingMessage);
   try {
-    if (automatic && canUseBeacon(body)) {
-      const queued = navigator.sendBeacon(
-        endpoint,
-        new Blob([body], { type: "text/plain;charset=utf-8" })
-      );
-      if (queued) {
-        const sentMessage = successMessage || `Completed game request queued: ${rowsToUpload.length} rows.`;
-        setUploadStatus(sentMessage);
-        if (automatic && game.over) {
-          gameStatus.textContent = `Game over: ${game.deathReason}. Upload request queued.`;
-        }
-        return true;
-      }
-    }
-
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
       method: "POST",
