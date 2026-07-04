@@ -370,7 +370,11 @@ function endGame(elapsedSeconds) {
   showDashboard(elapsedSeconds);
   gameStatus.textContent = `Game over: ${game.deathReason}`;
   drawScene();
-  uploadData({ automatic: true, silentWhenMissing: true });
+  uploadRows(currentGameLogs, {
+    automatic: true,
+    silentWhenMissing: true,
+    uploadedThrough: allLogs.length,
+  });
 }
 
 function resetDashboard() {
@@ -591,7 +595,10 @@ function getUploadEndpoint() {
   );
 }
 
-async function uploadData({ automatic = false, silentWhenMissing = false } = {}) {
+async function uploadRows(
+  rowsToUpload,
+  { automatic = false, silentWhenMissing = false, uploadedThrough = null } = {}
+) {
   const endpoint = getUploadEndpoint();
   if (!endpoint) {
     if (silentWhenMissing) {
@@ -601,8 +608,6 @@ async function uploadData({ automatic = false, silentWhenMissing = false } = {})
     return;
   }
 
-  const uploadedRows = Number(localStorage.getItem(UPLOADED_ROWS_KEY) || 0);
-  const rowsToUpload = allLogs.slice(uploadedRows);
   if (!rowsToUpload.length) {
     if (silentWhenMissing) {
       return;
@@ -617,7 +622,6 @@ async function uploadData({ automatic = false, silentWhenMissing = false } = {})
     rows: rowsToUpload,
   };
 
-  const nextUploadedRows = uploadedRows + rowsToUpload.length;
   uploadStatus.textContent = automatic
     ? `Auto-uploading ${rowsToUpload.length} rows...`
     : `Uploading ${rowsToUpload.length} rows...`;
@@ -629,7 +633,9 @@ async function uploadData({ automatic = false, silentWhenMissing = false } = {})
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
-    localStorage.setItem(UPLOADED_ROWS_KEY, String(nextUploadedRows));
+    if (uploadedThrough !== null) {
+      localStorage.setItem(UPLOADED_ROWS_KEY, String(uploadedThrough));
+    }
     uploadStatus.textContent = automatic
       ? `Auto-upload sent: ${rowsToUpload.length} new rows.`
       : `Upload sent: ${rowsToUpload.length} new rows.`;
@@ -638,6 +644,19 @@ async function uploadData({ automatic = false, silentWhenMissing = false } = {})
       ? "Auto-upload failed. Data is still saved locally; use Upload Data to try again."
       : "Upload failed. Check the endpoint URL and internet connection.";
   }
+}
+
+async function uploadData() {
+  let uploadedRows = Number(localStorage.getItem(UPLOADED_ROWS_KEY) || 0);
+  if (uploadedRows > allLogs.length) {
+    uploadedRows = 0;
+    localStorage.setItem(UPLOADED_ROWS_KEY, "0");
+  }
+
+  const rowsToUpload = allLogs.slice(uploadedRows);
+  await uploadRows(rowsToUpload, {
+    uploadedThrough: uploadedRows + rowsToUpload.length,
+  });
 }
 
 startButton.addEventListener("click", startGame);
