@@ -21,6 +21,7 @@ const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 3;
+const UPLOAD_CHUNK_SIZE = 120;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -35,6 +36,7 @@ const playerPlayCount = document.querySelector("#playerPlayCount");
 const startButton = document.querySelector("#startButton");
 const restartButton = document.querySelector("#restartButton");
 const exportButton = document.querySelector("#exportButton");
+const soundButton = document.querySelector("#soundButton");
 const clearButton = document.querySelector("#clearButton");
 const uploadEndpointInput = document.querySelector("#uploadEndpointInput");
 const saveEndpointButton = document.querySelector("#saveEndpointButton");
@@ -231,6 +233,15 @@ function restartGame() {
   startGame();
 }
 
+function enableSound() {
+  unlockAudio();
+  audioUnlocked = true;
+  soundButton.textContent = "Sound On";
+  gameStatus.textContent = "Sound on. Tap the game to play.";
+  playTone("score");
+  window.setTimeout(() => playTone("flap"), 140);
+}
+
 function startOrFlap() {
   unlockAudio();
   if (!game.running) {
@@ -369,6 +380,7 @@ function unlockAudio() {
       audioContext.resume();
     }
     audioUnlocked = true;
+    soundButton.textContent = "Sound On";
   } catch {
     audioUnlocked = false;
   }
@@ -899,24 +911,57 @@ function getUploadEndpoint() {
 }
 
 async function uploadCompletedGame() {
-  const rowsToUpload = currentGameLogs.slice();
-  const lastRow = rowsToUpload[rowsToUpload.length - 1];
+  const completedRows = currentGameLogs.slice();
+  const lastRow = completedRows[completedRows.length - 1];
   if (!lastRow || lastRow.is_dead !== 1 || !lastRow.death_reason || lastRow.death_reason === "none") {
     setUploadStatus("Death row missing locally. Upload stopped.");
     return;
   }
 
-  game.finalUploadRows = rowsToUpload;
-  await uploadRows(rowsToUpload, {
+  game.finalUploadRows = completedRows;
+  const deathUploaded = await uploadRows([lastRow], {
     automatic: true,
     silentWhenMissing: true,
-    uploadedThrough: allLogs.length,
+    statusMessage: `Uploading death reason: ${lastRow.death_reason}...`,
+    successMessage: `Death reason uploaded: ${lastRow.death_reason}.`,
+    keepalive: true,
   });
+
+  if (!deathUploaded) {
+    return;
+  }
+
+  const rowsBeforeDeath = completedRows.slice(0, -1);
+  for (let index = 0; index < rowsBeforeDeath.length; index += UPLOAD_CHUNK_SIZE) {
+    const chunk = rowsBeforeDeath.slice(index, index + UPLOAD_CHUNK_SIZE);
+    const ok = await uploadRows(chunk, {
+      automatic: true,
+      silentWhenMissing: true,
+      statusMessage: `Uploading game data ${index + chunk.length}/${rowsBeforeDeath.length}...`,
+      successMessage: `Game data uploaded ${index + chunk.length}/${rowsBeforeDeath.length}.`,
+    });
+    if (!ok) {
+      return;
+    }
+  }
+
+  localStorage.setItem(UPLOADED_ROWS_KEY, String(allLogs.length));
+  setUploadStatus(`Completed game uploaded with death reason: ${lastRow.death_reason}.`);
+  if (game.over) {
+    gameStatus.textContent = `Game over: ${game.deathReason}. Upload sent.`;
+  }
 }
 
 async function uploadRows(
   rowsToUpload,
-  { automatic = false, silentWhenMissing = false, uploadedThrough = null } = {}
+  {
+    automatic = false,
+    silentWhenMissing = false,
+    uploadedThrough = null,
+    statusMessage = "",
+    successMessage = "",
+    keepalive = false,
+  } = {}
 ) {
   const endpoint = getUploadEndpoint();
   if (!endpoint) {
@@ -941,25 +986,25 @@ async function uploadRows(
     rows: rowsToUpload,
   };
 
-  const uploadingMessage = automatic
+  const uploadingMessage = statusMessage || (automatic
     ? `Auto-uploading completed game: ${rowsToUpload.length} rows...`
-    : `Uploading ${rowsToUpload.length} rows...`;
+    : `Uploading ${rowsToUpload.length} rows...`);
   setUploadStatus(uploadingMessage);
   try {
     // no-cors keeps this simple for Google Apps Script web apps used by students.
     await fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
-      keepalive: true,
+      keepalive,
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
     if (uploadedThrough !== null) {
       localStorage.setItem(UPLOADED_ROWS_KEY, String(uploadedThrough));
     }
-    const sentMessage = automatic
+    const sentMessage = successMessage || (automatic
       ? `Completed game uploaded: ${rowsToUpload.length} rows.`
-      : `Upload sent: ${rowsToUpload.length} new rows.`;
+      : `Upload sent: ${rowsToUpload.length} new rows.`);
     setUploadStatus(sentMessage);
     if (automatic && game.over) {
       gameStatus.textContent = `Game over: ${game.deathReason}. Upload sent.`;
@@ -991,6 +1036,7 @@ async function uploadData() {
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", restartGame);
 exportButton.addEventListener("click", exportCsv);
+soundButton.addEventListener("click", enableSound);
 clearButton.addEventListener("click", clearData);
 saveEndpointButton.addEventListener("click", saveEndpoint);
 uploadButton.addEventListener("click", uploadData);
