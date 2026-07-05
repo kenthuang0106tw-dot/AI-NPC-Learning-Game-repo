@@ -31,42 +31,31 @@ The dashboard also keeps each player's best score and unlocked achievements in b
 
 ## Data Collected
 
-To keep the Google Sheet small, the game records one row every 5 frames. Click frames and death frames are always recorded, even if they are not on a 5-frame sample.
+To keep the Google Sheet small, the game records one row every 5 frames. Click frames, pipe-pass frames, and death frames are always recorded, even if they are not on a 5-frame sample.
 
-- `game_id`
-- `player_name`
-- `player_play_count`
-- `device_id`
-- `time`
-- `frame`
-- `speed_level`
-- `flap_power`
-- `bird_y`
-- `bird_vy`
-- `pipe_x`
-- `pipe_gap_center`
-- `pipe_gap_size`
-- `next_pipe_distance`
-- `score`
-- `is_click`
-- `is_dead`
-- `death_reason`
-- `sample_type`
-- `bird_skin_level`
+Original columns are preserved:
 
-For click frames, the row also records:
+`game_id`, `player_name`, `player_play_count`, `device_id`, `time`, `frame`, `speed_level`, `flap_power`, `bird_y`, `bird_vy`, `pipe_x`, `pipe_gap_center`, `pipe_gap_size`, `next_pipe_distance`, `score`, `is_click`, `is_dead`, `death_reason`, `click_interval`, `error_to_center`, `sample_type`, `bird_skin_level`, `player_rank`, `is_personal_best`, `stability_score`, `control_score`, `rhythm_score`
 
-- `click_interval`: seconds since the previous click
-- `error_to_center`: `bird_y - pipe_gap_center`
-- `next_pipe_distance`: how far away the next pipe was when the player clicked
+New research columns are appended at the end:
 
-All rows are saved in browser `localStorage`, so restarting the game does not delete old data.
+- `pipe_id`: pipe group number for the current next pipe.
+- `pipe_result`: `pending`, `pass`, or `fail`.
+- `is_panic_click`: `1` when a click happens less than 0.3 seconds after the previous click.
+- `click_timing_type`: `early`, `optimal`, `late`, or `none`.
+- `before_error`: absolute pipe-center error at the moment of a click.
+- `after_error`: absolute pipe-center error 0.5 seconds after that click, or at death if the game ends first.
+- `correction_efficiency`: `before_error - after_error`.
+- `last_3s_avg_error`: average height error during the last 3 seconds before death.
+- `last_3s_error_std`: standard deviation of height error during the last 3 seconds before death.
+- `last_3s_click_rate`: clicks per second during the last 3 seconds before death.
+- `last_3s_panic_click_rate`: panic clicks per second during the last 3 seconds before death.
 
-`player_play_count` is important. Use it to compare a player's early rounds and later rounds instead of judging skill only by score.
+`player_play_count` is the main experience indicator. Use it to compare early rounds and later rounds instead of asking players to self-label skill.
 
 `flap_power` is fixed at `normal` so the main experimental variables are speed level and player practice count.
 
-`bird_skin_level` is visual only. It changes every 30 pipes and does not change bird size, collision, physics, speed, or jump force.
+Visual upgrades and achievements are feedback only. They do not change bird size, collision, physics, speed, jump force, pipe gap, or score.
 
 ## Export CSV
 
@@ -78,88 +67,13 @@ Press `Clear Data` only when you want to delete all saved experiment data.
 
 ## Upload Data From Different Devices
 
-Local storage stays on one device. To collect data from phones, tablets, and computers into one place, use a Google Sheet with Google Apps Script.
+Local storage stays on one device, but this project also uploads completed games to a shared Google Sheet.
 
-### Setup
+Players do not need to paste an upload URL. The game uses the project default Google Apps Script endpoint and automatically uploads after death. The final row in each round contains `is_dead = 1` and the correct `death_reason`.
 
-1. Create a Google Sheet.
-2. Open `Extensions` -> `Apps Script`.
-3. Paste this script and replace `PASTE_SHEET_ID_HERE` with the Google Sheet ID.
+For setup or redeployment, use the full script in `google-apps-script.js`. It includes the latest headers, chunk tracking, duplicate protection, and verification support.
 
-```javascript
-const SHEET_ID = "PASTE_SHEET_ID_HERE";
-const SHEET_NAME = "data";
-const HEADERS = [
-  "game_id",
-  "player_name",
-  "player_play_count",
-  "device_id",
-  "time",
-  "frame",
-  "speed_level",
-  "flap_power",
-  "bird_y",
-  "bird_vy",
-  "pipe_x",
-  "pipe_gap_center",
-  "pipe_gap_size",
-  "next_pipe_distance",
-  "score",
-  "is_click",
-  "is_dead",
-  "death_reason",
-  "click_interval",
-  "error_to_center",
-  "sample_type",
-  "bird_skin_level",
-];
-
-function parsePayload(e) {
-  if (e.parameter && e.parameter.payload) {
-    return JSON.parse(e.parameter.payload);
-  }
-  return JSON.parse(e.postData.contents);
-}
-
-function doPost(e) {
-  const payload = parsePayload(e);
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME)
-    || SpreadsheetApp.openById(SHEET_ID).insertSheet(SHEET_NAME);
-
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(HEADERS);
-  }
-
-  const existingKeys = new Set();
-  const lastRow = sheet.getLastRow();
-  if (lastRow >= 2) {
-    const existing = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
-    existing.forEach((row) => existingKeys.add(`${row[0]}|${row[5]}`));
-  }
-
-  const rows = (payload.rows || [])
-    .filter((row) => !existingKeys.has(`${row.game_id}|${row.frame}`))
-    .map((row) => HEADERS.map((header) => row[header] ?? ""));
-  if (rows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
-  }
-
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, rows: rows.length }));
-}
-```
-
-4. Click `Deploy` -> `New deployment`.
-5. Choose `Web app`.
-6. Set `Who has access` to `Anyone`.
-7. Copy the Web App URL.
-8. Paste that URL into the game's `Upload Endpoint` box and press `Save URL`.
-9. After that, each completed game uploads automatically after death as one complete round. The final row in that round contains `is_dead = 1` and the `death_reason`.
-
-Each device can use the same upload URL, so all data goes into the same Google Sheet.
-
-`Upload Backup` is still useful as a backup button. It resends all rows saved in the browser, so the Sheet may contain duplicates. During analysis, remove duplicates by comparing `game_id` and `frame`.
-
-For this project, the tested Web App URL is already filled into the game as the default upload endpoint. Players usually only need to open the game and play.
+If duplicate rows appear during testing, remove duplicates during analysis by comparing `game_id` and `frame`.
 
 ## Game Over Dashboard
 
@@ -176,6 +90,8 @@ After each game, the dashboard shows:
 - visual achievements earned that round
 
 These metrics help compare different playing styles.
+
+The achievement system has 50 achievements. Achievements are only feedback and motivation; they never change score, speed, collision, gravity, pipe layout, or jump force.
 
 ## Research Questions
 
@@ -195,6 +111,14 @@ Also compare by play count:
 - Round 8+: experienced stage
 
 This avoids defining "expert" only by score.
+
+Use the new research fields to study how players learn:
+
+- `is_panic_click`: does panic clicking decrease as `player_play_count` increases?
+- `correction_efficiency`: do later rounds show more clicks with positive correction efficiency?
+- `click_timing_type`: do players move from `late` clicks toward `early` or `optimal` clicks?
+- `pipe_id` and `pipe_result`: which pipe units are passed or failed most often?
+- `last_3s_avg_error`, `last_3s_error_std`, `last_3s_click_rate`, `last_3s_panic_click_rate`: can the last 3 seconds predict failure?
 
 ### 2. Can AI predict the player's next click?
 

@@ -29,6 +29,17 @@ const HEADERS = [
   "stability_score",
   "control_score",
   "rhythm_score",
+  "pipe_id",
+  "pipe_result",
+  "is_panic_click",
+  "click_timing_type",
+  "before_error",
+  "after_error",
+  "correction_efficiency",
+  "last_3s_avg_error",
+  "last_3s_error_std",
+  "last_3s_click_rate",
+  "last_3s_panic_click_rate",
 ];
 
 function parsePayload(e) {
