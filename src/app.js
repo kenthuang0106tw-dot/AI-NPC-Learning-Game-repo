@@ -1378,12 +1378,11 @@ function drawHud() {
   const myBest = game.playerName ? Math.max(profile.bestScore, game.score) : 0;
   const rankName = getRankName(myBest);
 
-  ctx.fillStyle = "rgba(17, 24, 39, 0.78)";
-  ctx.fillRect(14, 14, 222, 126);
-  ctx.fillStyle = "#ffffff";
+  drawRoundedPanel(14, 14, 222, 126, 8, "rgba(255, 255, 255, 0.58)", "rgba(17, 24, 39, 0.16)");
+  ctx.fillStyle = "rgba(17, 24, 39, 0.88)";
   ctx.font = "700 20px system-ui";
   ctx.fillText(`分數：${game.score}`, 28, 42);
-  ctx.font = "500 14px system-ui";
+  ctx.font = "700 14px system-ui";
   ctx.fillText(`速度：${formatSpeedLevel(game.speedLevel)}`, 28, 64);
   if (game.playerName) {
     ctx.fillText(`${game.playerName} 第 ${game.playerPlayCount} 局`, 28, 84, 180);
@@ -1392,9 +1391,8 @@ function drawHud() {
   ctx.fillText(`個人最高：${myBest} | ${rankName}`, 28, 124, 194);
 
   if (game.dailyChallengeActive) {
-    ctx.fillStyle = "rgba(45, 138, 79, 0.88)";
-    ctx.fillRect(14, 148, 190, 28);
-    ctx.fillStyle = "#ffffff";
+    drawRoundedPanel(14, 148, 190, 28, 8, "rgba(232, 247, 239, 0.72)", "rgba(45, 138, 79, 0.2)");
+    ctx.fillStyle = "rgba(29, 107, 58, 0.92)";
     ctx.font = "800 13px system-ui";
     ctx.fillText(`今日挑戰：普通 ${DAILY_CHALLENGE_TARGET} 分`, 24, 167);
   }
@@ -1420,6 +1418,27 @@ function drawHud() {
   if (game.over) {
     drawCenterText("遊戲結束", formatDeathReason(game.deathReason));
   }
+}
+
+function drawRoundedPanel(x, y, width, height, radius, fillStyle, strokeStyle) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCenterText(title, subtitle) {
@@ -1557,6 +1576,24 @@ async function processPendingUploads() {
 
   uploadInProgress = true;
   try {
+    const uploadBatch = getPendingUploadOrder();
+    let sentThisTick = 0;
+    for (const pending of uploadBatch) {
+      if (uploadRerunRequested || sentThisTick >= PENDING_SENDS_PER_TICK) {
+        break;
+      }
+      if (!shouldSendPending(pending)) {
+        continue;
+      }
+      const uploaded = await sendPendingUpload(pending);
+      if (uploaded) {
+        pending.attempts += 1;
+        pending.lastSentAt = new Date().toISOString();
+        savePendingUploads();
+        sentThisTick += 1;
+      }
+    }
+
     const verifyBatch = getPendingUploadOrder()
       .filter((pending) => shouldVerifyPending(pending))
       .slice(0, PENDING_VERIFICATIONS_PER_TICK);
@@ -1584,21 +1621,6 @@ async function processPendingUploads() {
         }
       }
     }
-
-    const uploadBatch = getPendingUploadOrder();
-    let sentThisTick = 0;
-    for (const pending of uploadBatch) {
-      if (!shouldSendPending(pending) || sentThisTick >= PENDING_SENDS_PER_TICK) {
-        continue;
-      }
-      const uploaded = await sendPendingUpload(pending);
-      if (uploaded) {
-        pending.attempts += 1;
-        pending.lastSentAt = new Date().toISOString();
-        savePendingUploads();
-        sentThisTick += 1;
-      }
-    }
   } finally {
     uploadInProgress = false;
     if (uploadRerunRequested && pendingUploads.length) {
@@ -1623,7 +1645,7 @@ function shouldSendPending(pending) {
 
 function shouldVerifyPending(pending) {
   if (!pending.lastSentAt) {
-    return true;
+    return false;
   }
   return Date.now() - Date.parse(pending.lastSentAt) >= VERIFY_AFTER_SEND_MS;
 }
