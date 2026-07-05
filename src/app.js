@@ -35,7 +35,7 @@ const VERIFY_AFTER_SEND_MS = 12000;
 const RESEND_PENDING_AFTER_MS = 180000;
 const PENDING_SENDS_PER_TICK = 8;
 const PENDING_VERIFICATIONS_PER_TICK = 12;
-const FORM_POST_WAIT_MS = 650;
+const FORM_POST_WAIT_MS = 10000;
 const PENDING_UPLOAD_INTERVAL_MS = 10000;
 const GLOBAL_BEST_REFRESH_MS = 60000;
 
@@ -1897,6 +1897,19 @@ async function uploadRows(
     ? `自動上傳完整一局：${rowsToUpload.length} 列...`
     : `正在上傳 ${rowsToUpload.length} 列...`);
   setUploadStatus(uploadingMessage);
+
+  const formSent = await postPayloadWithHiddenForm(endpoint, body);
+  if (formSent) {
+    const sentMessage = successMessage || (automatic
+      ? `完整一局已送出：${rowsToUpload.length} 列。`
+      : `上傳要求已送出：${rowsToUpload.length} 列。`);
+    setUploadStatus(sentMessage);
+    if (automatic && game.over) {
+      gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}，上傳要求已送出。`;
+    }
+    return true;
+  }
+
   try {
     await fetch(endpoint, {
       method: "POST",
@@ -1913,14 +1926,6 @@ async function uploadRows(
     }
     return true;
   } catch {
-    const fallbackSent = await postPayloadWithHiddenForm(endpoint, body);
-    if (fallbackSent) {
-      const sentMessage = successMessage || (automatic
-        ? `完整一局已送出：${rowsToUpload.length} 列。`
-        : `上傳要求已送出：${rowsToUpload.length} 列。`);
-      setUploadStatus(sentMessage);
-      return true;
-    }
     setUploadStatus(
       automatic
         ? "自動上傳失敗，請按補傳資料再試一次。"
@@ -1937,17 +1942,17 @@ function postPayloadWithHiddenForm(endpoint, payloadBody) {
       const iframe = document.createElement("iframe");
       const form = document.createElement("form");
       const payloadInput = document.createElement("textarea");
-      let done = false;
-      const finish = (ok) => {
-        if (done) {
+      let resolved = false;
+      const resolveOnce = (ok) => {
+        if (resolved) {
           return;
         }
-        done = true;
-        window.setTimeout(() => {
-          iframe.remove();
-          form.remove();
-        }, 0);
+        resolved = true;
         resolve(ok);
+      };
+      const cleanup = () => {
+        iframe.remove();
+        form.remove();
       };
 
       iframe.name = frameName;
@@ -1961,9 +1966,10 @@ function postPayloadWithHiddenForm(endpoint, payloadBody) {
       form.appendChild(payloadInput);
       document.body.appendChild(iframe);
       document.body.appendChild(form);
-      iframe.addEventListener("load", () => finish(true), { once: true });
-      window.setTimeout(() => finish(false), FORM_POST_WAIT_MS);
+      iframe.addEventListener("load", () => resolveOnce(true), { once: true });
       form.submit();
+      window.setTimeout(() => resolveOnce(true), 250);
+      window.setTimeout(cleanup, FORM_POST_WAIT_MS);
     } catch {
       resolve(false);
     }
