@@ -25,7 +25,7 @@ const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 6;
-const UPLOAD_CHUNK_SIZE = 80;
+const UPLOAD_CHUNK_SIZE = 500;
 const COMPLETE_UPLOAD_ATTEMPTS = 3;
 const VERIFY_RETRIES = 2;
 const VERIFY_WAIT_MS = 700;
@@ -1150,7 +1150,7 @@ async function processPendingUploads() {
       }
     }
 
-    for (const pending of getPendingUploadOrder()) {
+    for (const pending of uploadBatch) {
       if (uploadRerunRequested) {
         break;
       }
@@ -1190,9 +1190,14 @@ async function sendPendingUpload(pending) {
   for (let index = 0; index < pending.rows.length; index += UPLOAD_CHUNK_SIZE) {
     const chunk = pending.rows.slice(index, index + UPLOAD_CHUNK_SIZE);
     const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
+    const firstFrame = chunk[0]?.frame ?? "";
+    const lastFrame = chunk[chunk.length - 1]?.frame ?? "";
     const ok = await uploadRows(chunk, {
       automatic: true,
       silentWhenMissing: true,
+      chunkKey: `${pending.gameId}|${chunkNumber}|${chunk.length}|${firstFrame}|${lastFrame}`,
+      chunkNumber,
+      chunkCount,
       statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
       successMessage: `Pending complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
     });
@@ -1208,10 +1213,13 @@ function removePendingUpload(gameId) {
   savePendingUploads();
 }
 
-function buildUploadPayload(rowsToUpload) {
+function buildUploadPayload(rowsToUpload, { chunkKey = "", chunkNumber = "", chunkCount = "" } = {}) {
   return {
     device_id: deviceId,
     uploaded_at: new Date().toISOString(),
+    chunk_key: chunkKey,
+    chunk_number: chunkNumber,
+    chunk_count: chunkCount,
     rows: rowsToUpload,
   };
 }
@@ -1272,6 +1280,9 @@ async function uploadRows(
   {
     automatic = false,
     silentWhenMissing = false,
+    chunkKey = "",
+    chunkNumber = "",
+    chunkCount = "",
     statusMessage = "",
     successMessage = "",
   } = {}
@@ -1293,7 +1304,7 @@ async function uploadRows(
     return false;
   }
 
-  const payload = buildUploadPayload(rowsToUpload);
+  const payload = buildUploadPayload(rowsToUpload, { chunkKey, chunkNumber, chunkCount });
   const body = JSON.stringify(payload);
 
   const uploadingMessage = statusMessage || (automatic
@@ -1301,7 +1312,6 @@ async function uploadRows(
     : `Uploading ${rowsToUpload.length} rows...`);
   setUploadStatus(uploadingMessage);
   try {
-    await postPayloadWithHiddenForm(endpoint, body);
     await fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
@@ -1317,6 +1327,14 @@ async function uploadRows(
     }
     return true;
   } catch {
+    const fallbackSent = await postPayloadWithHiddenForm(endpoint, body);
+    if (fallbackSent) {
+      const sentMessage = successMessage || (automatic
+        ? `Completed game request sent: ${rowsToUpload.length} rows.`
+        : `Upload request sent: ${rowsToUpload.length} rows.`);
+      setUploadStatus(sentMessage);
+      return true;
+    }
     setUploadStatus(
       automatic
         ? "Auto-upload failed. Use Upload Backup to try again."
