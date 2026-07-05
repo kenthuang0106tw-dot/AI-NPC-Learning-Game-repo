@@ -171,7 +171,11 @@ function loadPendingUploads() {
 }
 
 function savePendingUploads() {
-  localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(pendingUploads));
+  try {
+    localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(pendingUploads));
+  } catch {
+    setUploadStatus("本機暫存空間已滿，但本次仍會直接嘗試上傳。");
+  }
 }
 
 function loadPlayerCounts() {
@@ -191,11 +195,19 @@ function loadPlayerProfiles() {
 }
 
 function savePlayerCounts() {
-  localStorage.setItem(PLAYER_COUNTS_KEY, JSON.stringify(playerCounts));
+  try {
+    localStorage.setItem(PLAYER_COUNTS_KEY, JSON.stringify(playerCounts));
+  } catch {
+    // Scores can still upload even if this browser cannot save more profile data.
+  }
 }
 
 function savePlayerProfiles() {
-  localStorage.setItem(PLAYER_PROFILES_KEY, JSON.stringify(playerProfiles));
+  try {
+    localStorage.setItem(PLAYER_PROFILES_KEY, JSON.stringify(playerProfiles));
+  } catch {
+    // Keep gameplay and upload running when localStorage is full.
+  }
 }
 
 function getPlayerProfile(name) {
@@ -241,7 +253,17 @@ function getDeviceId() {
 }
 
 function saveLogs() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(allLogs));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allLogs));
+  } catch {
+    allLogs = allLogs.slice(-5000);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(allLogs));
+    } catch {
+      allLogs = [];
+    }
+    setUploadStatus("本機資料太多，已縮小本機備份；雲端上傳會優先執行。");
+  }
   savedRowsValue.textContent = allLogs.length;
 }
 
@@ -642,13 +664,14 @@ function endGame(elapsedSeconds) {
   const roundSummary = calculateRoundSummary(elapsedSeconds);
   updatePlayerProgress(roundSummary);
   applyRoundSummaryToRows(roundSummary);
+  gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}，準備上傳。`;
+  uploadCompletedGame();
   allLogs = allLogs.concat(currentGameLogs);
   refreshAllUsersBestScore();
   saveLogs();
   showDashboard(roundSummary);
   gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}`;
   drawScene();
-  uploadCompletedGame();
 }
 
 function ensureDeathFrameLogged(elapsedSeconds) {
