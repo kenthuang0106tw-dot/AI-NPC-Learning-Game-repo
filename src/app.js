@@ -44,6 +44,24 @@ const SPEED_SETTINGS = {
   fast: { gravity: 0.52, flap: -8.4, pipeSpeed: 3.6 },
 };
 
+const ACHIEVEMENTS = [
+  { name: "First Flight", title: "第一次通過", description: "通過第一根水管。" },
+  { name: "Pipe Reader", title: "讀管高手", description: "分數達到 10。" },
+  { name: "Calm Pilot", title: "冷靜飛行", description: "分數達到 30。" },
+  { name: "Expert", title: "高手入門", description: "分數達到 50。" },
+  { name: "Night Flyer", title: "夜空飛行", description: "分數達到 90。" },
+  { name: "Sky Master", title: "天空大師", description: "分數達到 120。" },
+  { name: "Legend", title: "傳奇飛行", description: "分數達到 150。" },
+  { name: "Personal Best", title: "刷新紀錄", description: "突破自己的最高分、最長時間或最佳穩定度。" },
+  { name: "Stable Pilot", title: "穩定駕駛", description: "生存 12 秒，且高度控制穩定。" },
+  { name: "Steady Wing", title: "穩定翅膀", description: "分數達到 5，且高度波動小。" },
+  { name: "Perfect Flight x5", title: "完美連飛 x5", description: "連續 5 根水管都接近洞口中心。" },
+  { name: "Practice 5", title: "練習 5 局", description: "同一個名字累積遊玩 5 局。" },
+  { name: "Practice 20", title: "練習 20 局", description: "同一個名字累積遊玩 20 局。" },
+  { name: "Speed Explorer", title: "速度探索者", description: "玩過慢速、普通、快速三種模式。" },
+  { name: "Daily Challenger", title: "今日挑戰者", description: "完成今日固定挑戰。" },
+];
+
 const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
 const playerNameInput = document.querySelector("#playerNameInput");
@@ -91,6 +109,7 @@ let allLogs = loadLogs();
 let pendingUploads = loadPendingUploads();
 let playerCounts = loadPlayerCounts();
 let playerProfiles = loadPlayerProfiles();
+let allUsersBestScore = calculateAllUsersBestScore();
 let animationId = null;
 let pendingClick = false;
 let currentGameLogs = [];
@@ -225,10 +244,14 @@ function saveLogs() {
   savedRowsValue.textContent = allLogs.length;
 }
 
+function refreshAllUsersBestScore() {
+  allUsersBestScore = calculateAllUsersBestScore();
+}
+
 function setUploadStatus(message) {
-  const pendingText = pendingUploads.length ? ` Pending: ${pendingUploads.length}.` : "";
+  const pendingText = pendingUploads.length ? ` 待確認：${pendingUploads.length}。` : "";
   uploadStatus.textContent = `${message}${pendingText}`;
-  uploadStatusTop.textContent = `Upload: ${message}${pendingText}`;
+  uploadStatusTop.textContent = `上傳：${message}${pendingText}`;
   uploadResult.textContent = `${message}${pendingText}`;
 }
 
@@ -244,7 +267,7 @@ function updatePlayerCountDisplay() {
     bestScore.textContent = name ? profile.bestScore : "--";
   }
   if (bestSurvival) {
-    bestSurvival.textContent = name && profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)}s` : "--";
+    bestSurvival.textContent = name && profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)} 秒` : "--";
   }
   if (bestStability) {
     bestStability.textContent = name && profile.bestStabilityScore ? `${profile.bestStabilityScore}/5` : "--";
@@ -253,14 +276,15 @@ function updatePlayerCountDisplay() {
     rankValue.textContent = name ? getRankLabel(profile.bestScore) : "--";
   }
   if (achievementCount) {
-    achievementCount.textContent = name ? profile.achievements.length : "--";
+    achievementCount.textContent = name ? formatAchievementProgress(profile) : "--";
   }
+  renderAchievements();
 }
 
 function preparePlayerForGame() {
   const name = getPlayerName();
   if (!name) {
-    gameStatus.textContent = "Please enter a player name before starting.";
+    gameStatus.textContent = "請先輸入玩家名字。";
     playerNameInput.focus();
     return false;
   }
@@ -287,8 +311,8 @@ function setSpeedLevel(speedLevel) {
 function enableDailyChallenge() {
   game.dailyChallengeActive = true;
   setSpeedLevel("normal");
-  dailyChallengeText.textContent = `Today's Challenge: Normal Speed, score ${DAILY_CHALLENGE_TARGET}.`;
-  gameStatus.textContent = `Daily Challenge ready: reach ${DAILY_CHALLENGE_TARGET} points on Normal.`;
+  dailyChallengeText.textContent = `今日挑戰：普通速度，目標 ${DAILY_CHALLENGE_TARGET} 分。`;
+  gameStatus.textContent = `今日挑戰已啟動：普通速度達到 ${DAILY_CHALLENGE_TARGET} 分。`;
 }
 
 function randomGapCenter() {
@@ -342,7 +366,7 @@ function resetGame() {
   game.comboMessage = "";
   game.comboEffectAge = 0;
 
-  gameStatus.textContent = "Ready. Press Start, Space, click, or tap.";
+  gameStatus.textContent = "準備好了，按開始或直接點畫面。";
   updateLiveMetrics(0);
   resetDashboard();
   drawScene();
@@ -362,8 +386,8 @@ function startGame() {
   game.running = true;
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
-  gameStatus.textContent = "Playing. Tap once to fly upward.";
-  setUploadStatus("Ready. Full round uploads after game over.");
+  gameStatus.textContent = "遊戲中，點一下往上飛。";
+  setUploadStatus("待機，結束後自動上傳完整一局。");
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -473,7 +497,7 @@ function updateScore() {
       if (isPerfect) {
         game.perfectCombo += 1;
         game.bestPerfectCombo = Math.max(game.bestPerfectCombo, game.perfectCombo);
-        game.comboMessage = `Perfect Flight x${game.perfectCombo}`;
+        game.comboMessage = `完美飛行 x${game.perfectCombo}`;
         game.comboEffectAge = 0;
       } else {
         game.perfectCombo = 0;
@@ -482,7 +506,7 @@ function updateScore() {
         x: BIRD_X + 38,
         y: game.birdY,
         age: 0,
-        label: isPerfect ? `Perfect x${game.perfectCombo}` : "",
+        label: isPerfect ? `完美 x${game.perfectCombo}` : "",
       });
       checkAchievements();
     }
@@ -614,9 +638,10 @@ function endGame(elapsedSeconds) {
   updatePlayerProgress(roundSummary);
   applyRoundSummaryToRows(roundSummary);
   allLogs = allLogs.concat(currentGameLogs);
+  refreshAllUsersBestScore();
   saveLogs();
   showDashboard(roundSummary);
-  gameStatus.textContent = `Game over: ${game.deathReason}`;
+  gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}`;
   drawScene();
   uploadCompletedGame();
 }
@@ -643,23 +668,23 @@ function resetDashboard() {
   finalScore.textContent = "--";
   const profile = getPlayerProfile(getPlayerName());
   bestScore.textContent = getPlayerName() ? profile.bestScore : "--";
-  bestSurvival.textContent = getPlayerName() && profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)}s` : "--";
+  bestSurvival.textContent = getPlayerName() && profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)} 秒` : "--";
   bestStability.textContent = getPlayerName() && profile.bestStabilityScore ? `${profile.bestStabilityScore}/5` : "--";
   rankValue.textContent = getPlayerName() ? getRankLabel(profile.bestScore) : "--";
-  achievementCount.textContent = getPlayerName() ? profile.achievements.length : "--";
+  achievementCount.textContent = getPlayerName() ? formatAchievementProgress(profile) : "--";
   clicksPerSecond.textContent = "--";
   averageError.textContent = "--";
   deathReason.textContent = "--";
   heightVariation.textContent = "--";
   uploadResult.textContent = uploadStatus.textContent || "--";
-  encouragementText.textContent = "Play a round to see feedback.";
-  analysisText.textContent = "Analysis appears only after game over.";
-  recordText.textContent = "Personal best feedback appears here.";
+  encouragementText.textContent = "完成一局後會看到飛行回饋。";
+  analysisText.textContent = "詳細分析會在遊戲結束後出現。";
+  recordText.textContent = "個人紀錄會顯示在這裡。";
   stabilityStars.textContent = "-----";
   controlStars.textContent = "-----";
   rhythmStars.textContent = "-----";
-  playerTypeText.textContent = "Player type appears after game over.";
-  achievementList.innerHTML = "";
+  playerTypeText.textContent = "玩家類型會在結束後顯示。";
+  renderAchievements();
 }
 
 function calculateRoundSummary(elapsedSeconds) {
@@ -721,25 +746,25 @@ function showDashboard(summary) {
     addAchievement("Stable Pilot");
   }
 
-  survivalTime.textContent = `${summary.elapsedSeconds.toFixed(2)}s`;
+  survivalTime.textContent = `${summary.elapsedSeconds.toFixed(2)} 秒`;
   finalScore.textContent = game.score;
   const profile = getPlayerProfile(game.playerName);
   bestScore.textContent = profile.bestScore;
-  bestSurvival.textContent = profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)}s` : "--";
+  bestSurvival.textContent = profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)} 秒` : "--";
   bestStability.textContent = profile.bestStabilityScore ? `${profile.bestStabilityScore}/5` : "--";
   rankValue.textContent = getRankLabel(profile.bestScore);
-  achievementCount.textContent = profile.achievements.length;
+  achievementCount.textContent = formatAchievementProgress(profile);
   clicksPerSecond.textContent = summary.clicksPerSecondValue.toFixed(2);
   averageError.textContent = summary.avgAbsError !== null ? summary.avgAbsError.toFixed(2) : "--";
-  deathReason.textContent = game.deathReason;
+  deathReason.textContent = formatDeathReason(game.deathReason);
   heightVariation.textContent = summary.heightStd !== null ? summary.heightStd.toFixed(2) : "--";
   encouragementText.textContent = getEncouragement();
   analysisText.textContent = getRoundAnalysis(summary);
   recordText.textContent = getRecordText(summary);
   stabilityStars.textContent = stars(summary.stabilityScore);
   controlStars.textContent = stars(summary.controlScore);
-  rhythmStars.textContent = summary.rhythmScore ? stars(summary.rhythmScore) : "Not enough taps";
-  playerTypeText.textContent = `Your type: ${summary.playerType}`;
+  rhythmStars.textContent = summary.rhythmScore ? stars(summary.rhythmScore) : "點擊不足";
+  playerTypeText.textContent = `你的類型：${summary.playerType}`;
   renderAchievements();
   if (summary.heightStd !== null) {
     localStorage.setItem(LAST_HEIGHT_VARIATION_KEY, String(summary.heightStd));
@@ -765,7 +790,7 @@ function updatePlayerProgress(summary) {
     summary.recordMessages.push(getScoreRecordMessage(game.score, oldBestScore));
   } else if (profile.bestScore > game.score) {
     const gap = profile.bestScore - game.score;
-    summary.recordMessages.push(`Only ${gap} point${gap === 1 ? "" : "s"} away from your score record.`);
+    summary.recordMessages.push(`只差 ${gap} 分就追平個人最高分。`);
   }
   if (summary.elapsedSeconds > profile.bestSurvivalTime) {
     profile.bestSurvivalTime = summary.elapsedSeconds;
@@ -776,7 +801,7 @@ function updatePlayerProgress(summary) {
     profile.bestStabilityScore = summary.stabilityScore;
     profile.bestStabilityStd = summary.heightStd;
     summary.isPersonalBest = true;
-    summary.recordMessages.push(`New stability record: ${summary.stabilityScore}/5.`);
+    summary.recordMessages.push(`穩定度刷新紀錄：${summary.stabilityScore}/5。`);
   }
   if (game.playerPlayCount >= 5) {
     addAchievement("Practice 5");
@@ -802,18 +827,18 @@ function updatePlayerProgress(summary) {
 
 function getEncouragement() {
   if (game.dailyChallengeActive && game.score >= DAILY_CHALLENGE_TARGET) {
-    return "Daily Challenge complete. Same rules, stronger control.";
+    return "今日挑戰完成！規則一樣，但你的控制更穩了。";
   }
   if (game.score >= 50) {
-    return "Excellent flight. You reached expert territory.";
+    return "飛得很漂亮，已經進入高手區間。";
   }
   if (game.score >= 20) {
-    return "Nice control. You kept the bird alive through a long run.";
+    return "控制不錯，這局撐得很久。";
   }
   if (game.score >= 1) {
-    return "Good start. Try to keep the bird closer to the pipe center.";
+    return "有通過水管了，下一局試著更靠近洞口中心。";
   }
-  return "First flights are data too. Try a steadier tap rhythm next round.";
+  return "第一局也是重要資料，下一次試試更穩定的點擊節奏。";
 }
 
 function scoreStability(heightStd) {
@@ -870,6 +895,19 @@ function getRankLabel(score) {
   return "🐣 新手飛行員";
 }
 
+function formatSpeedLevel(speedLevel) {
+  if (speedLevel === "slow") return "慢速";
+  if (speedLevel === "fast") return "快速";
+  return "普通";
+}
+
+function formatDeathReason(reason) {
+  if (reason === "hit_top_pipe") return "撞到上方水管";
+  if (reason === "hit_bottom_pipe") return "撞到下方水管";
+  if (reason === "hit_ground") return "撞到地面";
+  return "無";
+}
+
 function getPlayerType({ stabilityScore, controlScore, rhythmScore }) {
   const scores = [
     { label: "穩定型玩家", value: stabilityScore },
@@ -885,18 +923,18 @@ function getPlayerType({ stabilityScore, controlScore, rhythmScore }) {
 
 function getScoreRecordMessage(score, oldBestScore) {
   if (!oldBestScore) {
-    return `🎉 New Record! First score record: ${score}.`;
+    return `🎉 新紀錄！第一次建立最高分：${score} 分。`;
   }
   const improvement = ((score - oldBestScore) / oldBestScore) * 100;
-  return `🎉 New Record! You improved your score by ${improvement.toFixed(0)}%.`;
+  return `🎉 新紀錄！比之前進步 ${improvement.toFixed(0)}%。`;
 }
 
 function getSurvivalRecordMessage(elapsedSeconds, oldBestSurvival) {
   if (!oldBestSurvival) {
-    return `New longest flight: ${elapsedSeconds.toFixed(2)}s.`;
+    return `最長飛行紀錄：${elapsedSeconds.toFixed(2)} 秒。`;
   }
   const improvement = ((elapsedSeconds - oldBestSurvival) / oldBestSurvival) * 100;
-  return `New longest flight. You improved by ${improvement.toFixed(0)}%.`;
+  return `最長時間刷新，比之前進步 ${improvement.toFixed(0)}%。`;
 }
 
 function getRecordText(summary) {
@@ -906,62 +944,98 @@ function getRecordText(summary) {
   const profile = getPlayerProfile(game.playerName);
   if (profile.bestScore > game.score) {
     const gap = profile.bestScore - game.score;
-    return `🔥 Only ${gap} point${gap === 1 ? "" : "s"} away from your score record.`;
+    return `🔥 只差 ${gap} 分突破你的最高分。`;
   }
-  return "Keep flying to build your personal record history.";
+  return "繼續挑戰，累積你的個人飛行紀錄。";
 }
 
 function getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd, stabilityScore, controlScore, rhythmScore, playerType }) {
   const notes = [];
   if (clicksPerSecondValue > 2.4) {
-    notes.push("Your click rate was high.");
+    notes.push("你的點擊頻率偏高。");
   } else if (clicksPerSecondValue < 1.0) {
-    notes.push("Your click rate was low.");
+    notes.push("你的點擊頻率偏低。");
   } else {
-    notes.push("Your click rhythm was moderate.");
+    notes.push("你的點擊節奏適中。");
   }
 
   if (absErrors.length && average(absErrors) > 80) {
-    notes.push("Your height was often far from the pipe center.");
+    notes.push("你按下時常離洞口中心較遠。");
   } else if (absErrors.length) {
-    notes.push("Your height stayed closer to the pipe center.");
+    notes.push("你按下時比較接近洞口中心。");
   }
 
   if (heightStd !== null && game.previousHeightVariation !== null) {
     if (heightStd < game.previousHeightVariation) {
-      notes.push("Your height control was steadier than last round.");
+      notes.push("這局高度控制比上一局穩定。");
     } else if (heightStd > game.previousHeightVariation) {
-      notes.push("Your height control varied more than last round.");
+      notes.push("這局高度波動比上一局大。");
     }
   }
 
   if (stabilityScore >= 4) {
-    notes.push("Your stability rating was strong.");
+    notes.push("穩定度表現很好。");
   }
   if (controlScore >= 4) {
-    notes.push("Your taps were close to the pipe center.");
+    notes.push("點擊位置很接近洞口中心。");
   }
   if (rhythmScore >= 4) {
-    notes.push("Your rhythm was consistent.");
+    notes.push("點擊節奏很一致。");
   }
-  notes.push(`Your current flight style is ${playerType}.`);
+  notes.push(`目前飛行風格是：${playerType}。`);
 
   return notes.join(" ");
 }
 
-function renderAchievements() {
-  achievementList.innerHTML = "";
-  const profile = getPlayerProfile(game.playerName);
-  if (!profile.achievements.length) {
-    const item = document.createElement("li");
-    item.textContent = "No achievements yet";
-    achievementList.appendChild(item);
-    return;
+function formatAchievementProgress(profile) {
+  return `${profile.achievements.length}/${ACHIEVEMENTS.length}`;
+}
+
+function calculateAllUsersBestScore() {
+  const best = { score: 0, player: "" };
+
+  for (const [name, profile] of Object.entries(playerProfiles)) {
+    const score = Number(profile.bestScore) || 0;
+    if (score > best.score) {
+      best.score = score;
+      best.player = name;
+    }
   }
 
-  for (const achievement of profile.achievements) {
+  for (const row of allLogs) {
+    const score = Number(row.score) || 0;
+    if (score > best.score) {
+      best.score = score;
+      best.player = row.player_name || "";
+    }
+  }
+
+  return best;
+}
+
+function getAllUsersBestScore() {
+  if (game.playerName && game.score > allUsersBestScore.score) {
+    return { score: game.score, player: game.playerName };
+  }
+  return allUsersBestScore;
+}
+
+function renderAchievements() {
+  achievementList.innerHTML = "";
+  const name = game.playerName || getPlayerName();
+  const profile = getPlayerProfile(name);
+  const completed = new Set(profile.achievements);
+  const newlyCompleted = new Set(game.achievements);
+
+  for (const achievement of ACHIEVEMENTS) {
     const item = document.createElement("li");
-    item.textContent = game.achievements.includes(achievement) ? `${achievement} (new)` : achievement;
+    const isComplete = completed.has(achievement.name);
+    const isNew = newlyCompleted.has(achievement.name);
+    item.className = `achievement-item ${isComplete ? "completed" : "locked"}${isNew ? " new" : ""}`;
+    item.innerHTML = `
+      <strong>${isComplete ? "完成" : "未完成"}：${achievement.title}${isNew ? "（新）" : ""}</strong>
+      <span>${achievement.description}</span>
+    `;
     achievementList.appendChild(item);
   }
 }
@@ -978,7 +1052,7 @@ function standardDeviation(values) {
 
 function updateLiveMetrics(elapsedSeconds) {
   scoreValue.textContent = game.score;
-  timeValue.textContent = `${elapsedSeconds.toFixed(1)}s`;
+  timeValue.textContent = `${elapsedSeconds.toFixed(1)} 秒`;
   frameValue.textContent = game.frame;
   savedRowsValue.textContent = allLogs.length;
 }
@@ -1299,23 +1373,30 @@ function drawGround() {
 }
 
 function drawHud() {
+  const profile = getPlayerProfile(game.playerName);
+  const allBest = getAllUsersBestScore();
+  const myBest = game.playerName ? Math.max(profile.bestScore, game.score) : 0;
+  const rankName = getRankName(myBest);
+
   ctx.fillStyle = "rgba(17, 24, 39, 0.78)";
-  ctx.fillRect(14, 14, 170, 78);
+  ctx.fillRect(14, 14, 222, 126);
   ctx.fillStyle = "#ffffff";
   ctx.font = "700 20px system-ui";
-  ctx.fillText(`Score: ${game.score}`, 28, 42);
+  ctx.fillText(`分數：${game.score}`, 28, 42);
   ctx.font = "500 14px system-ui";
-  ctx.fillText(`Speed: ${game.speedLevel}`, 28, 64);
+  ctx.fillText(`速度：${formatSpeedLevel(game.speedLevel)}`, 28, 64);
   if (game.playerName) {
-    ctx.fillText(`${game.playerName} #${game.playerPlayCount}`, 28, 82);
+    ctx.fillText(`${game.playerName} 第 ${game.playerPlayCount} 局`, 28, 84, 180);
   }
+  ctx.fillText(`全體最高：${allBest.score}${allBest.player ? `（${allBest.player}）` : ""}`, 28, 104, 194);
+  ctx.fillText(`個人最高：${myBest} | ${rankName}`, 28, 124, 194);
 
   if (game.dailyChallengeActive) {
     ctx.fillStyle = "rgba(45, 138, 79, 0.88)";
-    ctx.fillRect(14, 100, 190, 28);
+    ctx.fillRect(14, 148, 190, 28);
     ctx.fillStyle = "#ffffff";
     ctx.font = "800 13px system-ui";
-    ctx.fillText(`Daily: ${DAILY_CHALLENGE_TARGET} on Normal`, 24, 119);
+    ctx.fillText(`今日挑戰：普通 ${DAILY_CHALLENGE_TARGET} 分`, 24, 167);
   }
 
   if (game.comboMessage && game.comboEffectAge < 80) {
@@ -1334,10 +1415,10 @@ function drawHud() {
   }
 
   if (!game.running && !game.over) {
-    drawCenterText("Press Start", "Space / click / touch makes the bird fly");
+    drawCenterText("按開始", "空白鍵、點擊、觸控都可以飛");
   }
   if (game.over) {
-    drawCenterText("Game Over", game.deathReason);
+    drawCenterText("遊戲結束", formatDeathReason(game.deathReason));
   }
 }
 
@@ -1402,26 +1483,27 @@ function csvCell(value) {
 }
 
 function clearData() {
-  if (!window.confirm("Clear all saved experiment data?")) {
+  if (!window.confirm("確定要清除本機保存的所有實驗資料嗎？")) {
     return;
   }
   allLogs = [];
   pendingUploads = [];
   playerCounts = {};
   playerProfiles = {};
+  refreshAllUsersBestScore();
   savePlayerCounts();
   savePlayerProfiles();
   savePendingUploads();
   updatePlayerCountDisplay();
   saveLogs();
-  gameStatus.textContent = "Saved data cleared.";
+  gameStatus.textContent = "本機保存資料已清除。";
 }
 
 function saveEndpoint() {
   const endpoint = getUploadEndpoint();
   localStorage.setItem(UPLOAD_ENDPOINT_KEY, endpoint);
   uploadEndpointInput.value = endpoint;
-  setUploadStatus("Ready. Using the project Sheet endpoint.");
+  setUploadStatus("已使用專案的試算表上傳網址。");
 }
 
 function getUploadEndpoint() {
@@ -1440,7 +1522,7 @@ async function uploadCompletedGame() {
   const completedRows = currentGameLogs.slice();
   const lastRow = completedRows[completedRows.length - 1];
   if (!lastRow || lastRow.is_dead !== 1 || !lastRow.death_reason || lastRow.death_reason === "none") {
-    setUploadStatus("Death row missing locally. Upload stopped.");
+    setUploadStatus("本機缺少死亡列，已停止上傳。");
     return;
   }
 
@@ -1462,7 +1544,7 @@ function enqueuePendingUpload(rows) {
     createdAt: new Date().toISOString(),
   });
   savePendingUploads();
-  setUploadStatus(`Saved complete round locally for verified upload: ${lastRow.player_name} #${lastRow.player_play_count}.`);
+  setUploadStatus(`完整一局已存入待上傳：${lastRow.player_name} 第 ${lastRow.player_play_count} 局。`);
 }
 
 async function processPendingUploads() {
@@ -1479,26 +1561,26 @@ async function processPendingUploads() {
       .filter((pending) => shouldVerifyPending(pending))
       .slice(0, PENDING_VERIFICATIONS_PER_TICK);
     if (!verifyBatch.length && pendingUploads.length) {
-      setUploadStatus("Upload sent. Waiting for Google Sheet to finish writing before checking again.");
+      setUploadStatus("已送出，等待 Google 試算表寫入後再確認。");
     }
 
     for (const pending of verifyBatch) {
       if (uploadRerunRequested) {
         break;
       }
-      setUploadStatus(`Checking Sheet for ${pending.playerName} #${pending.playerPlayCount}...`);
+      setUploadStatus(`確認試算表：${pending.playerName} 第 ${pending.playerPlayCount} 局...`);
       const verified = await verifyPendingUpload(pending);
       if (verified) {
         removePendingUpload(pending.gameId);
-        setUploadStatus(`Sheet verified: ${pending.playerName} #${pending.playerPlayCount}, ${pending.rows.length} rows.`);
+        setUploadStatus(`試算表已確認：${pending.playerName} 第 ${pending.playerPlayCount} 局，${pending.rows.length} 列。`);
         if (game.gameId === pending.gameId && game.over) {
-          gameStatus.textContent = `Game over: ${game.deathReason}. Sheet verified.`;
+          gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}，試算表已確認。`;
         }
       } else {
         savePendingUploads();
-        setUploadStatus(`Still not verified. Will retry automatically: ${pending.playerName} #${pending.playerPlayCount}.`);
+        setUploadStatus(`尚未確認，會自動重試：${pending.playerName} 第 ${pending.playerPlayCount} 局。`);
         if (game.gameId === pending.gameId && game.over) {
-          gameStatus.textContent = `Game over: ${game.deathReason}. Upload pending retry.`;
+          gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}，等待自動補傳。`;
         }
       }
     }
@@ -1559,8 +1641,8 @@ async function sendPendingUpload(pending) {
       chunkKey: chunkInfo.key,
       chunkNumber: chunkInfo.number,
       chunkCount: chunks.length,
-      statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkInfo.number}/${chunks.length}...`,
-      successMessage: `Pending complete round chunk sent ${chunkInfo.number}/${chunks.length}: ${chunkInfo.end}/${pending.rows.length} rows.`,
+      statusMessage: `上傳完整一局 ${pending.playerName} 第 ${pending.playerPlayCount} 局：第 ${chunkInfo.number}/${chunks.length} 包...`,
+      successMessage: `已送出第 ${chunkInfo.number}/${chunks.length} 包：${chunkInfo.end}/${pending.rows.length} 列。`,
     });
     if (!ok) {
       return false;
@@ -1720,7 +1802,7 @@ async function uploadRows(
     if (silentWhenMissing) {
       return false;
     }
-    setUploadStatus("Paste and save an upload endpoint first.");
+    setUploadStatus("請先貼上並儲存上傳網址。");
     return false;
   }
 
@@ -1728,7 +1810,7 @@ async function uploadRows(
     if (silentWhenMissing) {
       return false;
     }
-    setUploadStatus("No new rows to upload.");
+    setUploadStatus("沒有新的資料列可以上傳。");
     return false;
   }
 
@@ -1736,8 +1818,8 @@ async function uploadRows(
   const body = JSON.stringify(payload);
 
   const uploadingMessage = statusMessage || (automatic
-    ? `Auto-uploading completed game: ${rowsToUpload.length} rows...`
-    : `Uploading ${rowsToUpload.length} rows...`);
+    ? `自動上傳完整一局：${rowsToUpload.length} 列...`
+    : `正在上傳 ${rowsToUpload.length} 列...`);
   setUploadStatus(uploadingMessage);
   try {
     await fetch(endpoint, {
@@ -1747,26 +1829,26 @@ async function uploadRows(
       body,
     });
     const sentMessage = successMessage || (automatic
-      ? `Completed game request sent: ${rowsToUpload.length} rows.`
-      : `Upload request sent: ${rowsToUpload.length} rows.`);
+      ? `完整一局已送出：${rowsToUpload.length} 列。`
+      : `上傳要求已送出：${rowsToUpload.length} 列。`);
     setUploadStatus(sentMessage);
     if (automatic && game.over) {
-      gameStatus.textContent = `Game over: ${game.deathReason}. Upload request sent.`;
+      gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}，上傳要求已送出。`;
     }
     return true;
   } catch {
     const fallbackSent = await postPayloadWithHiddenForm(endpoint, body);
     if (fallbackSent) {
       const sentMessage = successMessage || (automatic
-        ? `Completed game request sent: ${rowsToUpload.length} rows.`
-        : `Upload request sent: ${rowsToUpload.length} rows.`);
+        ? `完整一局已送出：${rowsToUpload.length} 列。`
+        : `上傳要求已送出：${rowsToUpload.length} 列。`);
       setUploadStatus(sentMessage);
       return true;
     }
     setUploadStatus(
       automatic
-        ? "Auto-upload failed. Use Upload Backup to try again."
-        : "Upload failed. Check the endpoint URL and internet connection."
+        ? "自動上傳失敗，請按補傳資料再試一次。"
+        : "上傳失敗，請檢查網址與網路。"
     );
     return false;
   }
@@ -1816,13 +1898,13 @@ async function uploadData() {
   if (pendingUploads.length) {
     await processPendingUploads();
     if (pendingUploads.length) {
-      setUploadStatus(`Pending uploads still not verified: ${pendingUploads.length}. Keep this page open and try again.`);
+      setUploadStatus(`仍有 ${pendingUploads.length} 局尚未確認，請保持頁面開啟。`);
       return;
     }
   }
 
   if (!allLogs.length) {
-    setUploadStatus("No saved rows to upload.");
+    setUploadStatus("沒有已保存資料可以上傳。");
     return;
   }
 
@@ -1830,8 +1912,8 @@ async function uploadData() {
   for (let index = 0; index < allLogs.length; index += UPLOAD_CHUNK_SIZE) {
     const chunk = allLogs.slice(index, index + UPLOAD_CHUNK_SIZE);
     const ok = await uploadRows(chunk, {
-      statusMessage: `Sending saved backup data ${index + chunk.length}/${allLogs.length}...`,
-      successMessage: `Backup request sent ${index + chunk.length}/${allLogs.length}.`,
+      statusMessage: `正在補傳保存資料 ${index + chunk.length}/${allLogs.length}...`,
+      successMessage: `補傳要求已送出 ${index + chunk.length}/${allLogs.length}。`,
     });
     if (!ok) {
       return;
@@ -1839,7 +1921,7 @@ async function uploadData() {
     sentRows = index + chunk.length;
   }
 
-  setUploadStatus(`Backup request sent: ${sentRows} saved rows. Sheet may contain duplicates.`);
+  setUploadStatus(`補傳要求已送出：${sentRows} 列。試算表可能會有重複列。`);
 }
 
 startButton.addEventListener("click", startGame);
@@ -1881,7 +1963,7 @@ document.addEventListener("keydown", (event) => {
 playerNameInput.value = "";
 localStorage.setItem(UPLOAD_ENDPOINT_KEY, DEFAULT_UPLOAD_ENDPOINT);
 uploadEndpointInput.value = DEFAULT_UPLOAD_ENDPOINT;
-setUploadStatus("Ready. Completed games upload automatically.");
+setUploadStatus("待機，完整一局會自動上傳。");
 updatePlayerCountDisplay();
 resetGame();
 saveLogs();

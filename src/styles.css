@@ -17,9 +17,9 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 12% 8%, rgba(255, 216, 77, 0.35), transparent 22rem),
-    radial-gradient(circle at 88% 12%, rgba(79, 176, 109, 0.28), transparent 24rem),
-    linear-gradient(180deg, #d7f1ff 0%, #f7fbff 100%);
+    linear-gradient(135deg, rgba(255, 216, 77, 0.22), transparent 34%),
+    linear-gradient(225deg, rgba(45, 138, 79, 0.18), transparent 36%),
+    linear-gradient(180deg, #dff5ff 0%, #f8fbfd 100%);
 }
 
 button,
@@ -44,24 +44,27 @@ button:hover {
 }
 
 .app-shell {
-  width: min(1180px, calc(100% - 28px));
+  width: min(1160px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 24px 0 36px;
+  padding: 18px 0 32px;
 }
 
-.hero,
+.app-header,
 .play-panel,
-.data-panel,
-.research-panel {
+.data-panel {
   border: 1px solid rgba(23, 32, 42, 0.1);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 18px 54px rgba(23, 32, 42, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 44px rgba(23, 32, 42, 0.1);
 }
 
-.hero {
-  padding: 28px;
-  margin-bottom: 18px;
+.app-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
 }
 
 .eyebrow {
@@ -80,9 +83,9 @@ p {
 }
 
 h1 {
-  margin-bottom: 12px;
-  font-size: clamp(2.2rem, 7vw, 5rem);
-  line-height: 0.95;
+  margin-bottom: 0;
+  font-size: clamp(1.9rem, 5vw, 3.7rem);
+  line-height: 1;
 }
 
 h2 {
@@ -90,12 +93,13 @@ h2 {
   font-size: 1.1rem;
 }
 
-.intro {
-  max-width: 760px;
+.app-tagline {
+  max-width: 420px;
   margin-bottom: 0;
   color: #405366;
-  font-size: 1.05rem;
-  line-height: 1.65;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: right;
 }
 
 .game-layout {
@@ -106,7 +110,7 @@ h2 {
 
 .play-panel,
 .data-panel {
-  padding: 20px;
+  padding: 18px;
 }
 
 .panel-heading {
@@ -173,14 +177,14 @@ h2 {
 
 .control-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1.2fr 1.2fr 1fr 1fr;
   gap: 10px;
 }
 
 .data-panel {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 14px;
 }
 
 .data-panel section {
@@ -241,7 +245,7 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  margin-bottom: 12px;
+  margin-top: 12px;
   padding: 10px;
   border-radius: 8px;
   background: #fff8dc;
@@ -338,6 +342,11 @@ h2 {
   background: #f7fbff;
 }
 
+.game-over-feedback h3 {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+}
+
 .game-over-feedback p {
   margin: 0;
   color: #405366;
@@ -377,30 +386,105 @@ h2 {
   font-weight: 900;
 }
 
+.mini-data,
+.extra-report,
+.cloud-settings,
+.research-panel {
+  border: 1px solid rgba(23, 32, 42, 0.1);
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.mini-data {
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.extra-report {
+  padding: 10px;
+}
+
+.cloud-settings {
+  padding: 12px;
+}
+
+.mini-data summary,
+.extra-report summary,
+.cloud-settings summary,
+.research-panel summary {
+  cursor: pointer;
+  color: #17202a;
+  font-weight: 900;
+}
+
+.compact-metrics {
+  margin-top: 10px;
+}
+
+.compact-dashboard {
+  margin-top: 10px;
+}
+
 .game-over-feedback ul {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
+  max-height: 280px;
+  overflow: auto;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .game-over-feedback li {
-  padding: 7px 9px;
-  border-radius: 999px;
-  background: #e8f7ef;
-  color: #1d6b3a;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid rgba(23, 32, 42, 0.1);
+  border-radius: 8px;
   font-size: 0.82rem;
+}
+
+.achievement-item strong {
+  color: #17202a;
   font-weight: 900;
 }
 
+.achievement-item span {
+  color: #607487;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.achievement-item.completed {
+  background: #e8f7ef;
+  border-color: rgba(45, 138, 79, 0.3);
+}
+
+.achievement-item.completed strong {
+  color: #1d6b3a;
+}
+
+.achievement-item.locked {
+  background: #f1f5f8;
+  opacity: 0.82;
+}
+
+.achievement-item.new {
+  border-color: #ffd84d;
+  box-shadow: 0 0 0 2px rgba(255, 216, 77, 0.35);
+}
+
 .research-panel {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.research-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 18px;
-  padding: 22px;
+  gap: 14px;
+  margin-top: 12px;
 }
 
 .research-panel p {
@@ -411,8 +495,18 @@ h2 {
 
 @media (max-width: 920px) {
   .game-layout,
-  .research-panel {
+  .research-grid {
     grid-template-columns: 1fr;
+  }
+
+  .app-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .app-tagline {
+    max-width: none;
+    text-align: left;
   }
 
   .status-pill {
@@ -427,7 +521,7 @@ h2 {
     padding-top: 12px;
   }
 
-  .hero,
+  .app-header,
   .play-panel,
   .data-panel,
   .research-panel {

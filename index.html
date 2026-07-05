@@ -1,146 +1,159 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Flappy Skill Lab</title>
-    <link rel="stylesheet" href="src/styles.css?v=motivation-feedback-1" />
+    <title>飛行技巧實驗室</title>
+    <link rel="stylesheet" href="src/styles.css?v=clean-chinese-ui-1" />
   </head>
   <body>
     <main class="app-shell">
-      <section class="hero" aria-labelledby="pageTitle">
-        <p class="eyebrow">Elementary Science Fair MVP</p>
-        <h1 id="pageTitle">Flappy Skill Lab</h1>
-        <p class="intro">
-          A simple Flappy Bird-style game that records sampled player movement, then exports data for Excel or Python analysis.
-        </p>
-      </section>
+      <header class="app-header" aria-labelledby="pageTitle">
+        <div>
+          <p class="eyebrow">國小科展實驗平台</p>
+          <h1 id="pageTitle">飛行技巧實驗室</h1>
+        </div>
+        <p class="app-tagline">每一局都會記錄操作資料，用來比較反應、穩定度與速度影響。</p>
+      </header>
 
       <section class="game-layout">
-        <section class="play-panel" aria-label="Flappy game">
+        <section class="play-panel" aria-label="遊戲區">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Experiment game</p>
-              <h2>Tap to Fly</h2>
+              <p class="eyebrow">遊戲區</p>
+              <h2>點一下就飛</h2>
             </div>
             <div class="status-stack">
-              <div class="status-pill" id="gameStatus">Choose speed and press Start.</div>
-              <div class="status-pill upload-pill" id="uploadStatusTop">Upload: ready</div>
+              <div class="status-pill" id="gameStatus">輸入名字後按開始。</div>
+              <div class="status-pill upload-pill" id="uploadStatusTop">上傳：待機</div>
             </div>
           </div>
 
-          <canvas id="gameCanvas" width="480" height="640" aria-label="Flappy game canvas"></canvas>
+          <canvas id="gameCanvas" width="480" height="640" aria-label="飛行遊戲畫面"></canvas>
 
           <div class="quick-help">
-            <span>Space</span>
-            <span>Mouse click</span>
-            <span>Phone touch</span>
+            <span>空白鍵</span>
+            <span>滑鼠點擊</span>
+            <span>手機觸控</span>
           </div>
 
-          <div class="control-row" aria-label="Game controls">
-            <button id="startButton">Start</button>
-            <button id="restartButton">Restart</button>
-            <button id="exportButton">Export CSV</button>
-            <button id="clearButton">Clear Data</button>
+          <div class="control-row" aria-label="遊戲控制">
+            <button id="startButton">開始</button>
+            <button id="restartButton">再玩一次</button>
+            <button id="exportButton">匯出 CSV</button>
+            <button id="clearButton">清除資料</button>
           </div>
         </section>
 
-        <aside class="data-panel" aria-label="Experiment controls and dashboard">
-          <section>
-            <p class="eyebrow">Speed mode</p>
-            <h2>Before Start</h2>
+        <aside class="data-panel" aria-label="資料與紀錄">
+          <section class="player-card">
+            <p class="eyebrow">玩家</p>
+            <h2>挑戰設定</h2>
             <label class="text-field">
-              Player Name
-              <input id="playerNameInput" type="text" autocomplete="off" placeholder="Example: Amy" />
+              玩家名字
+              <input id="playerNameInput" type="text" autocomplete="off" placeholder="例如：小明" />
             </label>
             <p class="player-note">
-              This player has played <strong id="playerPlayCount">0</strong> saved rounds on this browser.
+              這個名字已遊玩 <strong id="playerPlayCount">0</strong> 局。
             </p>
+            <div class="speed-options" role="group" aria-label="速度">
+              <label><input type="radio" name="speed" value="slow" /> 慢速</label>
+              <label><input type="radio" name="speed" value="normal" checked /> 普通</label>
+              <label><input type="radio" name="speed" value="fast" /> 快速</label>
+            </div>
             <div class="daily-challenge">
-              <p id="dailyChallengeText">Today's Challenge: Normal Speed, score 50.</p>
-              <button id="dailyChallengeButton" type="button">Daily Challenge</button>
-            </div>
-            <div class="speed-options" role="group" aria-label="Speed level">
-              <label><input type="radio" name="speed" value="slow" /> Slow</label>
-              <label><input type="radio" name="speed" value="normal" checked /> Normal</label>
-              <label><input type="radio" name="speed" value="fast" /> Fast</label>
+              <p id="dailyChallengeText">今日挑戰：普通速度，目標 50 分。</p>
+              <button id="dailyChallengeButton" type="button">今日挑戰</button>
             </div>
           </section>
 
           <section>
-            <p class="eyebrow">Live data</p>
-            <h2>Current Game</h2>
+            <p class="eyebrow">本局</p>
+            <h2>即時資料</h2>
             <div class="metric-grid">
-              <div><strong id="scoreValue">0</strong><span>Score</span></div>
-              <div><strong id="timeValue">0.0s</strong><span>Time</span></div>
-              <div><strong id="frameValue">0</strong><span>Frames</span></div>
-              <div><strong id="savedRowsValue">0</strong><span>Saved rows</span></div>
+              <div><strong id="scoreValue">0</strong><span>分數</span></div>
+              <div><strong id="timeValue">0.0 秒</strong><span>時間</span></div>
             </div>
+            <details class="mini-data">
+              <summary>實驗資料</summary>
+              <div class="metric-grid compact-metrics">
+                <div><strong id="frameValue">0</strong><span>影格</span></div>
+                <div><strong id="savedRowsValue">0</strong><span>資料列</span></div>
+              </div>
+            </details>
           </section>
 
           <section>
-            <p class="eyebrow">Cloud upload</p>
-            <h2>Cross-device Data</h2>
-            <label class="text-field">
-              Upload Endpoint
-              <input id="uploadEndpointInput" type="url" placeholder="Paste Google Apps Script Web App URL" />
-            </label>
-            <div class="upload-row">
-              <button id="saveEndpointButton">Save URL</button>
-              <button id="uploadButton">Upload Backup</button>
-            </div>
-            <p class="upload-status" id="uploadStatus">Optional: after saving a URL, each finished game uploads automatically.</p>
-          </section>
-
-          <section>
-            <p class="eyebrow">After game over</p>
-            <h2>Dashboard</h2>
+            <p class="eyebrow">結束後</p>
+            <h2>飛行報告</h2>
             <dl class="dashboard">
-              <div><dt>Survival time</dt><dd id="survivalTime">--</dd></div>
-              <div><dt>Score</dt><dd id="finalScore">--</dd></div>
-              <div><dt>Best score</dt><dd id="bestScore">--</dd></div>
-              <div><dt>Longest time</dt><dd id="bestSurvival">--</dd></div>
-              <div><dt>Best stability</dt><dd id="bestStability">--</dd></div>
-              <div><dt>Rank</dt><dd id="rankValue">--</dd></div>
-              <div><dt>Achievements</dt><dd id="achievementCount">--</dd></div>
-              <div><dt>Clicks per second</dt><dd id="clicksPerSecond">--</dd></div>
-              <div><dt>Avg height error</dt><dd id="averageError">--</dd></div>
-              <div><dt>Death reason</dt><dd id="deathReason">--</dd></div>
-              <div><dt>Height variation</dt><dd id="heightVariation">--</dd></div>
-              <div><dt>Upload result</dt><dd id="uploadResult">--</dd></div>
+              <div><dt>本局分數</dt><dd id="finalScore">--</dd></div>
+              <div><dt>個人最高</dt><dd id="bestScore">--</dd></div>
+              <div><dt>最長時間</dt><dd id="bestSurvival">--</dd></div>
+              <div><dt>最佳穩定</dt><dd id="bestStability">--</dd></div>
+              <div><dt>稱號</dt><dd id="rankValue">--</dd></div>
+              <div><dt>成就</dt><dd id="achievementCount">--</dd></div>
             </dl>
             <div class="game-over-feedback">
-              <p id="encouragementText">Play a round to see feedback.</p>
-              <p id="analysisText">Analysis appears only after game over.</p>
-              <p id="recordText">Personal best feedback appears here.</p>
-              <div class="flight-report" aria-label="Flight skill report">
-                <div><span>Stability</span><strong id="stabilityStars">-----</strong></div>
-                <div><span>Control</span><strong id="controlStars">-----</strong></div>
-                <div><span>Rhythm</span><strong id="rhythmStars">-----</strong></div>
-                <p id="playerTypeText">Player type appears after game over.</p>
+              <p id="encouragementText">完成一局後會看到飛行回饋。</p>
+              <p id="recordText">個人紀錄會顯示在這裡。</p>
+              <div class="flight-report" aria-label="飛行技術分析">
+                <div><span>穩定度</span><strong id="stabilityStars">-----</strong></div>
+                <div><span>控制力</span><strong id="controlStars">-----</strong></div>
+                <div><span>節奏感</span><strong id="rhythmStars">-----</strong></div>
+                <p id="playerTypeText">玩家類型會在結束後顯示。</p>
               </div>
-              <ul id="achievementList" aria-label="Achievements"></ul>
+              <details class="extra-report">
+                <summary>完整分析資料</summary>
+                <dl class="dashboard compact-dashboard">
+                  <div><dt>生存時間</dt><dd id="survivalTime">--</dd></div>
+                  <div><dt>每秒點擊</dt><dd id="clicksPerSecond">--</dd></div>
+                  <div><dt>平均誤差</dt><dd id="averageError">--</dd></div>
+                  <div><dt>死亡原因</dt><dd id="deathReason">--</dd></div>
+                  <div><dt>高度波動</dt><dd id="heightVariation">--</dd></div>
+                  <div><dt>上傳結果</dt><dd id="uploadResult">--</dd></div>
+                </dl>
+                <p id="analysisText">詳細分析會在遊戲結束後出現。</p>
+              </details>
+              <h3>成就列表</h3>
+              <ul id="achievementList" aria-label="成就列表"></ul>
             </div>
           </section>
+
+          <details class="cloud-settings">
+            <summary>雲端上傳設定</summary>
+            <label class="text-field">
+              上傳網址
+              <input id="uploadEndpointInput" type="url" placeholder="貼上 Google Apps Script 網址" />
+            </label>
+            <div class="upload-row">
+              <button id="saveEndpointButton">儲存網址</button>
+              <button id="uploadButton">補傳資料</button>
+            </div>
+            <p class="upload-status" id="uploadStatus">儲存網址後，每局結束會自動上傳。</p>
+          </details>
         </aside>
       </section>
 
-      <section class="research-panel" aria-label="Research questions">
-        <article>
-          <h2>1. Why are strong players better?</h2>
-          <p>Compare click rate, click timing, height error, and height variation between players.</p>
-        </article>
-        <article>
-          <h2>2. Can AI predict the next click?</h2>
-          <p>This MVP collects sampled frame data needed for a future AI model.</p>
-        </article>
-        <article>
-          <h2>3. What changes when speed increases?</h2>
-          <p>Compare the same player across Slow, Normal, and Fast using the exported CSV.</p>
-        </article>
-      </section>
+      <details class="research-panel">
+        <summary>科展研究重點</summary>
+        <div class="research-grid">
+          <article>
+            <h2>高手為什麼比較強？</h2>
+            <p>比較點擊頻率、點擊時機、高度誤差與高度波動。</p>
+          </article>
+          <article>
+            <h2>AI 能不能預測點擊？</h2>
+            <p>本階段先收集每一局的人類操作資料。</p>
+          </article>
+          <article>
+            <h2>速度會如何影響反應？</h2>
+            <p>比較同一位玩家在慢速、普通、快速下的表現。</p>
+          </article>
+        </div>
+      </details>
     </main>
 
-    <script src="src/app.js?v=motivation-feedback-1"></script>
+    <script src="src/app.js?v=clean-chinese-ui-1"></script>
   </body>
 </html>
