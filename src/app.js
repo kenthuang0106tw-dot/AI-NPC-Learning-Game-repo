@@ -387,7 +387,11 @@ function startGame() {
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "遊戲中，點一下往上飛。";
-  setUploadStatus("待機，結束後自動上傳完整一局。");
+  if (pendingUploads.length || uploadInProgress) {
+    setUploadStatus("背景上傳中，新局結束後也會自動加入。");
+  } else {
+    setUploadStatus("待機，結束後自動上傳完整一局。");
+  }
   animationId = window.requestAnimationFrame(update);
 }
 
@@ -1547,7 +1551,10 @@ async function uploadCompletedGame() {
 
   game.finalUploadRows = completedRows;
   enqueuePendingUpload(completedRows);
+  setUploadStatus(`正在啟動上傳：${lastRow.player_name} 第 ${lastRow.player_play_count} 局，${completedRows.length} 列。`);
   await processPendingUploads();
+  window.setTimeout(processPendingUploads, 1000);
+  window.setTimeout(processPendingUploads, 5000);
 }
 
 function enqueuePendingUpload(rows) {
@@ -1570,6 +1577,7 @@ async function processPendingUploads() {
   if (uploadInProgress || !pendingUploads.length) {
     if (uploadInProgress) {
       uploadRerunRequested = true;
+      setUploadStatus("上傳流程正在執行，新的資料已排隊。");
     }
     return;
   }
@@ -1664,7 +1672,7 @@ async function sendPendingUpload(pending) {
       chunkNumber: chunkInfo.number,
       chunkCount: chunks.length,
       statusMessage: `上傳完整一局 ${pending.playerName} 第 ${pending.playerPlayCount} 局：第 ${chunkInfo.number}/${chunks.length} 包...`,
-      successMessage: `已送出第 ${chunkInfo.number}/${chunks.length} 包：${chunkInfo.end}/${pending.rows.length} 列。`,
+      successMessage: `已送出到 Google：第 ${chunkInfo.number}/${chunks.length} 包，${chunkInfo.end}/${pending.rows.length} 列。等待試算表確認。`,
     });
     if (!ok) {
       return false;
