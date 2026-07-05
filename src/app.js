@@ -37,6 +37,7 @@ const PENDING_SENDS_PER_TICK = 8;
 const PENDING_VERIFICATIONS_PER_TICK = 12;
 const FORM_POST_WAIT_MS = 650;
 const PENDING_UPLOAD_INTERVAL_MS = 10000;
+const GLOBAL_BEST_REFRESH_MS = 60000;
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -1024,6 +1025,50 @@ function getAllUsersBestScore() {
   return allUsersBestScore;
 }
 
+function refreshGlobalBestFromSheet() {
+  return new Promise((resolve) => {
+    const callbackName = `flappyGlobalBest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const query = "select B, max(O) where B is not null group by B order by max(O) desc limit 1";
+    const script = document.createElement("script");
+    const cleanup = () => {
+      delete window[callbackName];
+      script.remove();
+    };
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve(false);
+    }, 7000);
+
+    window[callbackName] = (response) => {
+      window.clearTimeout(timeoutId);
+      const cells = response?.table?.rows?.[0]?.c || [];
+      const player = String(cells[0]?.v || "");
+      const score = Number(cells[1]?.v) || 0;
+      cleanup();
+      if (score > 0) {
+        allUsersBestScore = { score, player };
+        drawScene();
+        resolve(true);
+        return;
+      }
+      resolve(false);
+    };
+
+    script.onerror = () => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      resolve(false);
+    };
+    script.src =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+      `?sheet=${encodeURIComponent(SHEET_NAME)}` +
+      `&tqx=responseHandler:${callbackName}` +
+      `&tq=${encodeURIComponent(query)}` +
+      `&cachebust=${Date.now()}`;
+    document.head.appendChild(script);
+  });
+}
+
 function renderAchievements() {
   achievementList.innerHTML = "";
   const name = game.playerName || getPlayerName();
@@ -1617,6 +1662,7 @@ async function processPendingUploads() {
       const verified = await verifyPendingUpload(pending);
       if (verified) {
         removePendingUpload(pending.gameId);
+        refreshGlobalBestFromSheet();
         setUploadStatus(`試算表已確認：${pending.playerName} 第 ${pending.playerPlayCount} 局，${pending.rows.length} 列。`);
         if (game.gameId === pending.gameId && game.over) {
           gameStatus.textContent = `遊戲結束：${formatDeathReason(game.deathReason)}，試算表已確認。`;
@@ -1997,11 +2043,14 @@ setUploadStatus("待機，完整一局會自動上傳。");
 updatePlayerCountDisplay();
 resetGame();
 saveLogs();
+refreshGlobalBestFromSheet();
 processPendingUploads();
 window.setInterval(processPendingUploads, PENDING_UPLOAD_INTERVAL_MS);
+window.setInterval(refreshGlobalBestFromSheet, GLOBAL_BEST_REFRESH_MS);
 window.addEventListener("online", processPendingUploads);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
+    refreshGlobalBestFromSheet();
     processPendingUploads();
   }
 });
