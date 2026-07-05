@@ -24,6 +24,11 @@ const HEADERS = [
   "error_to_center",
   "sample_type",
   "bird_skin_level",
+  "player_rank",
+  "is_personal_best",
+  "stability_score",
+  "control_score",
+  "rhythm_score",
 ];
 
 function parsePayload(e) {
@@ -65,6 +70,8 @@ function doPost(e) {
   try {
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(HEADERS);
+    } else {
+      ensureHeaderColumns(sheet);
     }
 
     if (payload.chunk_key) {
@@ -100,6 +107,14 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ ok: true, rows: rows.length }));
   } finally {
     lock.releaseLock();
+  }
+}
+
+function ensureHeaderColumns(sheet) {
+  const currentHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  const missingHeaders = HEADERS.slice(currentHeaders.length);
+  if (missingHeaders.length > 0) {
+    sheet.getRange(1, currentHeaders.length + 1, 1, missingHeaders.length).setValues([missingHeaders]);
   }
 }
 

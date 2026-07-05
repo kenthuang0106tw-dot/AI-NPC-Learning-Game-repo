@@ -25,6 +25,8 @@ const SAMPLE_EVERY_FRAMES = 5;
 const FIXED_FLAP_POWER = "normal";
 const SKIN_PIPES_PER_LEVEL = 30;
 const MAX_BIRD_SKIN_LEVEL = 6;
+const DAILY_CHALLENGE_TARGET = 50;
+const PERFECT_FLIGHT_ERROR = 35;
 const UPLOAD_CHUNK_SIZE = 500;
 const COMPLETE_UPLOAD_ATTEMPTS = 3;
 const VERIFY_RETRIES = 2;
@@ -50,6 +52,8 @@ const startButton = document.querySelector("#startButton");
 const restartButton = document.querySelector("#restartButton");
 const exportButton = document.querySelector("#exportButton");
 const clearButton = document.querySelector("#clearButton");
+const dailyChallengeButton = document.querySelector("#dailyChallengeButton");
+const dailyChallengeText = document.querySelector("#dailyChallengeText");
 const uploadEndpointInput = document.querySelector("#uploadEndpointInput");
 const saveEndpointButton = document.querySelector("#saveEndpointButton");
 const uploadButton = document.querySelector("#uploadButton");
@@ -70,9 +74,17 @@ const deathReason = document.querySelector("#deathReason");
 const heightVariation = document.querySelector("#heightVariation");
 const uploadResult = document.querySelector("#uploadResult");
 const bestScore = document.querySelector("#bestScore");
+const bestSurvival = document.querySelector("#bestSurvival");
+const bestStability = document.querySelector("#bestStability");
+const rankValue = document.querySelector("#rankValue");
 const achievementCount = document.querySelector("#achievementCount");
 const encouragementText = document.querySelector("#encouragementText");
 const analysisText = document.querySelector("#analysisText");
+const recordText = document.querySelector("#recordText");
+const stabilityStars = document.querySelector("#stabilityStars");
+const controlStars = document.querySelector("#controlStars");
+const rhythmStars = document.querySelector("#rhythmStars");
+const playerTypeText = document.querySelector("#playerTypeText");
 const achievementList = document.querySelector("#achievementList");
 
 let allLogs = loadLogs();
@@ -110,6 +122,16 @@ const game = {
   previousHeightVariation: null,
   finalUploadRows: [],
   deathAnimationStarted: 0,
+  playerRank: "",
+  isPersonalBest: false,
+  stabilityScore: "",
+  controlScore: "",
+  rhythmScore: "",
+  perfectCombo: 0,
+  bestPerfectCombo: 0,
+  comboMessage: "",
+  comboEffectAge: 0,
+  dailyChallengeActive: false,
 };
 
 function loadLogs() {
@@ -158,13 +180,32 @@ function savePlayerProfiles() {
 
 function getPlayerProfile(name) {
   if (!name) {
-    return { bestScore: 0, achievements: [], speedsPlayed: [] };
+    return {
+      bestScore: 0,
+      bestSurvivalTime: 0,
+      bestStabilityScore: 0,
+      bestStabilityStd: null,
+      achievements: [],
+      speedsPlayed: [],
+    };
   }
   if (!playerProfiles[name]) {
-    playerProfiles[name] = { bestScore: 0, achievements: [], speedsPlayed: [] };
+    playerProfiles[name] = {
+      bestScore: 0,
+      bestSurvivalTime: 0,
+      bestStabilityScore: 0,
+      bestStabilityStd: null,
+      achievements: [],
+      speedsPlayed: [],
+    };
   }
   const profile = playerProfiles[name];
   profile.bestScore = Number(profile.bestScore) || 0;
+  profile.bestSurvivalTime = Number(profile.bestSurvivalTime) || 0;
+  profile.bestStabilityScore = Number(profile.bestStabilityScore) || 0;
+  profile.bestStabilityStd = profile.bestStabilityStd === null || profile.bestStabilityStd === undefined
+    ? null
+    : Number(profile.bestStabilityStd);
   profile.achievements = Array.isArray(profile.achievements) ? profile.achievements : [];
   profile.speedsPlayed = Array.isArray(profile.speedsPlayed) ? profile.speedsPlayed : [];
   return profile;
@@ -202,6 +243,15 @@ function updatePlayerCountDisplay() {
   if (bestScore) {
     bestScore.textContent = name ? profile.bestScore : "--";
   }
+  if (bestSurvival) {
+    bestSurvival.textContent = name && profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)}s` : "--";
+  }
+  if (bestStability) {
+    bestStability.textContent = name && profile.bestStabilityScore ? `${profile.bestStabilityScore}/5` : "--";
+  }
+  if (rankValue) {
+    rankValue.textContent = name ? getRankLabel(profile.bestScore) : "--";
+  }
   if (achievementCount) {
     achievementCount.textContent = name ? profile.achievements.length : "--";
   }
@@ -226,6 +276,19 @@ function preparePlayerForGame() {
 function getSpeedLevel() {
   const selected = [...speedInputs].find((input) => input.checked);
   return selected ? selected.value : "normal";
+}
+
+function setSpeedLevel(speedLevel) {
+  for (const input of speedInputs) {
+    input.checked = input.value === speedLevel;
+  }
+}
+
+function enableDailyChallenge() {
+  game.dailyChallengeActive = true;
+  setSpeedLevel("normal");
+  dailyChallengeText.textContent = `Today's Challenge: Normal Speed, score ${DAILY_CHALLENGE_TARGET}.`;
+  gameStatus.textContent = `Daily Challenge ready: reach ${DAILY_CHALLENGE_TARGET} points on Normal.`;
 }
 
 function randomGapCenter() {
@@ -269,6 +332,15 @@ function resetGame() {
   game.previousHeightVariation = Number(localStorage.getItem(LAST_HEIGHT_VARIATION_KEY) || "") || null;
   game.finalUploadRows = [];
   game.deathAnimationStarted = 0;
+  game.playerRank = getRankName(0);
+  game.isPersonalBest = false;
+  game.stabilityScore = "";
+  game.controlScore = "";
+  game.rhythmScore = "";
+  game.perfectCombo = 0;
+  game.bestPerfectCombo = 0;
+  game.comboMessage = "";
+  game.comboEffectAge = 0;
 
   gameStatus.textContent = "Ready. Press Start, Space, click, or tap.";
   updateLiveMetrics(0);
@@ -280,9 +352,13 @@ function startGame() {
   if (!preparePlayerForGame()) {
     return;
   }
+  if (game.dailyChallengeActive) {
+    setSpeedLevel("normal");
+  }
   resetGame();
   game.playerName = getPlayerName();
   game.playerPlayCount = playerCounts[game.playerName] || 1;
+  game.dailyChallengeActive = game.dailyChallengeActive;
   game.running = true;
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
@@ -392,7 +468,22 @@ function updateScore() {
     if (!pipe.passed && pipe.x + PIPE_WIDTH < BIRD_X) {
       pipe.passed = true;
       game.score += 1;
-      passEffects.push({ x: BIRD_X + 38, y: game.birdY, age: 0 });
+      const centerError = Math.abs(game.birdY - pipe.gapCenter);
+      const isPerfect = centerError <= PERFECT_FLIGHT_ERROR;
+      if (isPerfect) {
+        game.perfectCombo += 1;
+        game.bestPerfectCombo = Math.max(game.bestPerfectCombo, game.perfectCombo);
+        game.comboMessage = `Perfect Flight x${game.perfectCombo}`;
+        game.comboEffectAge = 0;
+      } else {
+        game.perfectCombo = 0;
+      }
+      passEffects.push({
+        x: BIRD_X + 38,
+        y: game.birdY,
+        age: 0,
+        label: isPerfect ? `Perfect x${game.perfectCombo}` : "",
+      });
       checkAchievements();
     }
   }
@@ -503,6 +594,11 @@ function logFrame({ time, isClick, clickInterval, errorToCenter, isDead, deathRe
     error_to_center: errorToCenter,
     sample_type: sampleType,
     bird_skin_level: getBirdSkinLevel(),
+    player_rank: game.playerRank || getRankName(game.score),
+    is_personal_best: game.isPersonalBest ? 1 : 0,
+    stability_score: game.stabilityScore,
+    control_score: game.controlScore,
+    rhythm_score: game.rhythmScore,
   };
   currentGameLogs.push(row);
 }
@@ -514,9 +610,12 @@ function endGame(elapsedSeconds) {
   window.cancelAnimationFrame(animationId);
   animationId = null;
   ensureDeathFrameLogged(elapsedSeconds);
+  const roundSummary = calculateRoundSummary(elapsedSeconds);
+  updatePlayerProgress(roundSummary);
+  applyRoundSummaryToRows(roundSummary);
   allLogs = allLogs.concat(currentGameLogs);
   saveLogs();
-  showDashboard(elapsedSeconds);
+  showDashboard(roundSummary);
   gameStatus.textContent = `Game over: ${game.deathReason}`;
   drawScene();
   uploadCompletedGame();
@@ -542,8 +641,12 @@ function ensureDeathFrameLogged(elapsedSeconds) {
 function resetDashboard() {
   survivalTime.textContent = "--";
   finalScore.textContent = "--";
-  bestScore.textContent = getPlayerName() ? getPlayerProfile(getPlayerName()).bestScore : "--";
-  achievementCount.textContent = getPlayerName() ? getPlayerProfile(getPlayerName()).achievements.length : "--";
+  const profile = getPlayerProfile(getPlayerName());
+  bestScore.textContent = getPlayerName() ? profile.bestScore : "--";
+  bestSurvival.textContent = getPlayerName() && profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)}s` : "--";
+  bestStability.textContent = getPlayerName() && profile.bestStabilityScore ? `${profile.bestStabilityScore}/5` : "--";
+  rankValue.textContent = getPlayerName() ? getRankLabel(profile.bestScore) : "--";
+  achievementCount.textContent = getPlayerName() ? profile.achievements.length : "--";
   clicksPerSecond.textContent = "--";
   averageError.textContent = "--";
   deathReason.textContent = "--";
@@ -551,10 +654,15 @@ function resetDashboard() {
   uploadResult.textContent = uploadStatus.textContent || "--";
   encouragementText.textContent = "Play a round to see feedback.";
   analysisText.textContent = "Analysis appears only after game over.";
+  recordText.textContent = "Personal best feedback appears here.";
+  stabilityStars.textContent = "-----";
+  controlStars.textContent = "-----";
+  rhythmStars.textContent = "-----";
+  playerTypeText.textContent = "Player type appears after game over.";
   achievementList.innerHTML = "";
 }
 
-function showDashboard(elapsedSeconds) {
+function calculateRoundSummary(elapsedSeconds) {
   const clicks = clickEvents.length;
   const absErrors = clickEvents
     .map((event) => event.errorToCenter)
@@ -563,40 +671,112 @@ function showDashboard(elapsedSeconds) {
   const heights = currentGameLogs.map((row) => Number(row.bird_y));
   const heightStd = heights.length ? standardDeviation(heights) : null;
   const clicksPerSecondValue = elapsedSeconds > 0 ? clicks / elapsedSeconds : 0;
-  if (elapsedSeconds >= 12 && heightStd !== null && heightStd <= 85) {
-    addAchievement("Stable Pilot");
-  }
-  updatePlayerProgress({ heightStd });
+  const clickIntervals = clickEvents
+    .map((event) => event.clickInterval)
+    .filter((value) => typeof value === "number" && Number.isFinite(value));
+  const rhythmStd = clickIntervals.length >= 2 ? standardDeviation(clickIntervals) : null;
+  const avgAbsError = absErrors.length ? average(absErrors) : null;
+  const stabilityScore = scoreStability(heightStd);
+  const controlScore = scoreControl(avgAbsError);
+  const rhythmScore = scoreRhythm(rhythmStd, clickIntervals.length);
+  const playerRank = getRankName(game.score);
 
-  survivalTime.textContent = `${elapsedSeconds.toFixed(2)}s`;
-  finalScore.textContent = game.score;
-  const profile = getPlayerProfile(game.playerName);
-  bestScore.textContent = profile.bestScore;
-  achievementCount.textContent = profile.achievements.length;
-  clicksPerSecond.textContent = clicksPerSecondValue.toFixed(2);
-  averageError.textContent = absErrors.length ? average(absErrors).toFixed(2) : "--";
-  deathReason.textContent = game.deathReason;
-  heightVariation.textContent = heightStd !== null ? heightStd.toFixed(2) : "--";
-  encouragementText.textContent = getEncouragement();
-  analysisText.textContent = getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd });
-  renderAchievements();
-  if (heightStd !== null) {
-    localStorage.setItem(LAST_HEIGHT_VARIATION_KEY, String(heightStd));
+  return {
+    elapsedSeconds,
+    clicks,
+    absErrors,
+    avgAbsError,
+    heights,
+    heightStd,
+    clicksPerSecondValue,
+    rhythmStd,
+    stabilityScore,
+    controlScore,
+    rhythmScore,
+    playerRank,
+    playerType: getPlayerType({ stabilityScore, controlScore, rhythmScore }),
+    recordMessages: [],
+    isPersonalBest: false,
+  };
+}
+
+function applyRoundSummaryToRows(summary) {
+  game.playerRank = summary.playerRank;
+  game.isPersonalBest = summary.isPersonalBest;
+  game.stabilityScore = summary.stabilityScore;
+  game.controlScore = summary.controlScore;
+  game.rhythmScore = summary.rhythmScore;
+
+  for (const row of currentGameLogs) {
+    row.player_rank = summary.playerRank;
+    row.is_personal_best = summary.isPersonalBest ? 1 : 0;
+    row.stability_score = summary.stabilityScore;
+    row.control_score = summary.controlScore;
+    row.rhythm_score = summary.rhythmScore;
   }
 }
 
-function updatePlayerProgress({ heightStd }) {
+function showDashboard(summary) {
+  if (summary.elapsedSeconds >= 12 && summary.heightStd !== null && summary.heightStd <= 85) {
+    addAchievement("Stable Pilot");
+  }
+
+  survivalTime.textContent = `${summary.elapsedSeconds.toFixed(2)}s`;
+  finalScore.textContent = game.score;
+  const profile = getPlayerProfile(game.playerName);
+  bestScore.textContent = profile.bestScore;
+  bestSurvival.textContent = profile.bestSurvivalTime ? `${profile.bestSurvivalTime.toFixed(2)}s` : "--";
+  bestStability.textContent = profile.bestStabilityScore ? `${profile.bestStabilityScore}/5` : "--";
+  rankValue.textContent = getRankLabel(profile.bestScore);
+  achievementCount.textContent = profile.achievements.length;
+  clicksPerSecond.textContent = summary.clicksPerSecondValue.toFixed(2);
+  averageError.textContent = summary.avgAbsError !== null ? summary.avgAbsError.toFixed(2) : "--";
+  deathReason.textContent = game.deathReason;
+  heightVariation.textContent = summary.heightStd !== null ? summary.heightStd.toFixed(2) : "--";
+  encouragementText.textContent = getEncouragement();
+  analysisText.textContent = getRoundAnalysis(summary);
+  recordText.textContent = getRecordText(summary);
+  stabilityStars.textContent = stars(summary.stabilityScore);
+  controlStars.textContent = stars(summary.controlScore);
+  rhythmStars.textContent = summary.rhythmScore ? stars(summary.rhythmScore) : "Not enough taps";
+  playerTypeText.textContent = `Your type: ${summary.playerType}`;
+  renderAchievements();
+  if (summary.heightStd !== null) {
+    localStorage.setItem(LAST_HEIGHT_VARIATION_KEY, String(summary.heightStd));
+  }
+}
+
+function updatePlayerProgress(summary) {
   const profile = getPlayerProfile(game.playerName);
   if (!game.playerName) {
     return;
   }
+
+  const oldBestScore = profile.bestScore;
+  const oldBestSurvival = profile.bestSurvivalTime;
 
   if (!profile.speedsPlayed.includes(game.speedLevel)) {
     profile.speedsPlayed.push(game.speedLevel);
   }
   if (game.score > profile.bestScore) {
     profile.bestScore = game.score;
+    summary.isPersonalBest = true;
     addAchievement("Personal Best");
+    summary.recordMessages.push(getScoreRecordMessage(game.score, oldBestScore));
+  } else if (profile.bestScore > game.score) {
+    const gap = profile.bestScore - game.score;
+    summary.recordMessages.push(`Only ${gap} point${gap === 1 ? "" : "s"} away from your score record.`);
+  }
+  if (summary.elapsedSeconds > profile.bestSurvivalTime) {
+    profile.bestSurvivalTime = summary.elapsedSeconds;
+    summary.isPersonalBest = true;
+    summary.recordMessages.push(getSurvivalRecordMessage(summary.elapsedSeconds, oldBestSurvival));
+  }
+  if (summary.stabilityScore > profile.bestStabilityScore) {
+    profile.bestStabilityScore = summary.stabilityScore;
+    profile.bestStabilityStd = summary.heightStd;
+    summary.isPersonalBest = true;
+    summary.recordMessages.push(`New stability record: ${summary.stabilityScore}/5.`);
   }
   if (game.playerPlayCount >= 5) {
     addAchievement("Practice 5");
@@ -607,14 +787,23 @@ function updatePlayerProgress({ heightStd }) {
   if (profile.speedsPlayed.length >= 3) {
     addAchievement("Speed Explorer");
   }
-  if (heightStd !== null && heightStd <= 65 && game.score >= 5) {
+  if (summary.heightStd !== null && summary.heightStd <= 65 && game.score >= 5) {
     addAchievement("Steady Wing");
+  }
+  if (game.bestPerfectCombo >= 5) {
+    addAchievement("Perfect Flight x5");
+  }
+  if (game.dailyChallengeActive && game.speedLevel === "normal" && game.score >= DAILY_CHALLENGE_TARGET) {
+    addAchievement("Daily Challenger");
   }
   savePlayerProfiles();
   updatePlayerCountDisplay();
 }
 
 function getEncouragement() {
+  if (game.dailyChallengeActive && game.score >= DAILY_CHALLENGE_TARGET) {
+    return "Daily Challenge complete. Same rules, stronger control.";
+  }
   if (game.score >= 50) {
     return "Excellent flight. You reached expert territory.";
   }
@@ -627,7 +816,102 @@ function getEncouragement() {
   return "First flights are data too. Try a steadier tap rhythm next round.";
 }
 
-function getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd }) {
+function scoreStability(heightStd) {
+  if (heightStd === null || !Number.isFinite(heightStd)) {
+    return 0;
+  }
+  if (heightStd <= 45) return 5;
+  if (heightStd <= 65) return 4;
+  if (heightStd <= 85) return 3;
+  if (heightStd <= 110) return 2;
+  return 1;
+}
+
+function scoreControl(avgAbsError) {
+  if (avgAbsError === null || !Number.isFinite(avgAbsError)) {
+    return 0;
+  }
+  if (avgAbsError <= 35) return 5;
+  if (avgAbsError <= 55) return 4;
+  if (avgAbsError <= 75) return 3;
+  if (avgAbsError <= 100) return 2;
+  return 1;
+}
+
+function scoreRhythm(rhythmStd, intervalCount) {
+  if (intervalCount < 2 || rhythmStd === null || !Number.isFinite(rhythmStd)) {
+    return 0;
+  }
+  if (rhythmStd <= 0.12) return 5;
+  if (rhythmStd <= 0.2) return 4;
+  if (rhythmStd <= 0.32) return 3;
+  if (rhythmStd <= 0.5) return 2;
+  return 1;
+}
+
+function stars(score) {
+  if (!score) {
+    return "-----";
+  }
+  return `${"★".repeat(score)}${"☆".repeat(5 - score)}`;
+}
+
+function getRankName(score) {
+  if (score >= 80) return "傳奇飛行員";
+  if (score >= 30) return "高手飛行員";
+  if (score >= 10) return "熟練飛行員";
+  return "新手飛行員";
+}
+
+function getRankLabel(score) {
+  if (score >= 80) return "🚀 傳奇飛行員";
+  if (score >= 30) return "🦅 高手飛行員";
+  if (score >= 10) return "🐦 熟練飛行員";
+  return "🐣 新手飛行員";
+}
+
+function getPlayerType({ stabilityScore, controlScore, rhythmScore }) {
+  const scores = [
+    { label: "穩定型玩家", value: stabilityScore },
+    { label: "精準型玩家", value: controlScore },
+    { label: "節奏型玩家", value: rhythmScore },
+  ].filter((score) => score.value > 0);
+  if (!scores.length) {
+    return "資料不足";
+  }
+  scores.sort((a, b) => b.value - a.value);
+  return scores[0].label;
+}
+
+function getScoreRecordMessage(score, oldBestScore) {
+  if (!oldBestScore) {
+    return `🎉 New Record! First score record: ${score}.`;
+  }
+  const improvement = ((score - oldBestScore) / oldBestScore) * 100;
+  return `🎉 New Record! You improved your score by ${improvement.toFixed(0)}%.`;
+}
+
+function getSurvivalRecordMessage(elapsedSeconds, oldBestSurvival) {
+  if (!oldBestSurvival) {
+    return `New longest flight: ${elapsedSeconds.toFixed(2)}s.`;
+  }
+  const improvement = ((elapsedSeconds - oldBestSurvival) / oldBestSurvival) * 100;
+  return `New longest flight. You improved by ${improvement.toFixed(0)}%.`;
+}
+
+function getRecordText(summary) {
+  if (summary.recordMessages.length) {
+    return summary.recordMessages.join(" ");
+  }
+  const profile = getPlayerProfile(game.playerName);
+  if (profile.bestScore > game.score) {
+    const gap = profile.bestScore - game.score;
+    return `🔥 Only ${gap} point${gap === 1 ? "" : "s"} away from your score record.`;
+  }
+  return "Keep flying to build your personal record history.";
+}
+
+function getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd, stabilityScore, controlScore, rhythmScore, playerType }) {
   const notes = [];
   if (clicksPerSecondValue > 2.4) {
     notes.push("Your click rate was high.");
@@ -650,6 +934,17 @@ function getRoundAnalysis({ clicksPerSecondValue, absErrors, heightStd }) {
       notes.push("Your height control varied more than last round.");
     }
   }
+
+  if (stabilityScore >= 4) {
+    notes.push("Your stability rating was strong.");
+  }
+  if (controlScore >= 4) {
+    notes.push("Your taps were close to the pipe center.");
+  }
+  if (rhythmScore >= 4) {
+    notes.push("Your rhythm was consistent.");
+  }
+  notes.push(`Your current flight style is ${playerType}.`);
 
   return notes.join(" ");
 }
@@ -847,6 +1142,13 @@ function drawPassEffects() {
     ctx.beginPath();
     ctx.arc(effect.x, effect.y, 12 + progress * 26, 0, Math.PI * 2);
     ctx.stroke();
+    if (effect.label) {
+      ctx.fillStyle = "#111827";
+      ctx.font = "800 16px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(effect.label, effect.x + 18, effect.y - 26 - progress * 18);
+      ctx.textAlign = "left";
+    }
     ctx.restore();
     effect.age += 1;
   }
@@ -1008,6 +1310,29 @@ function drawHud() {
     ctx.fillText(`${game.playerName} #${game.playerPlayCount}`, 28, 82);
   }
 
+  if (game.dailyChallengeActive) {
+    ctx.fillStyle = "rgba(45, 138, 79, 0.88)";
+    ctx.fillRect(14, 100, 190, 28);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 13px system-ui";
+    ctx.fillText(`Daily: ${DAILY_CHALLENGE_TARGET} on Normal`, 24, 119);
+  }
+
+  if (game.comboMessage && game.comboEffectAge < 80) {
+    const alpha = Math.max(0, 1 - game.comboEffectAge / 80);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(255, 216, 77, 0.92)";
+    ctx.strokeStyle = "rgba(17, 24, 39, 0.82)";
+    ctx.lineWidth = 4;
+    ctx.textAlign = "center";
+    ctx.font = "900 28px system-ui";
+    ctx.strokeText(game.comboMessage, CANVAS_WIDTH / 2, 170);
+    ctx.fillText(game.comboMessage, CANVAS_WIDTH / 2, 170);
+    ctx.restore();
+    game.comboEffectAge += 1;
+  }
+
   if (!game.running && !game.over) {
     drawCenterText("Press Start", "Space / click / touch makes the bird fly");
   }
@@ -1052,6 +1377,11 @@ function exportCsv() {
     "error_to_center",
     "sample_type",
     "bird_skin_level",
+    "player_rank",
+    "is_personal_best",
+    "stability_score",
+    "control_score",
+    "rhythm_score",
   ];
   const csvRows = [
     headers.join(","),
@@ -1516,6 +1846,7 @@ startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", restartGame);
 exportButton.addEventListener("click", exportCsv);
 clearButton.addEventListener("click", clearData);
+dailyChallengeButton.addEventListener("click", enableDailyChallenge);
 saveEndpointButton.addEventListener("click", saveEndpoint);
 uploadButton.addEventListener("click", uploadData);
 playerNameInput.addEventListener("input", updatePlayerCountDisplay);

@@ -236,6 +236,32 @@ h2 {
   line-height: 1.45;
 }
 
+.daily-challenge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #fff8dc;
+}
+
+.daily-challenge p {
+  margin: 0;
+  color: #725a12;
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.daily-challenge button {
+  min-height: 38px;
+  padding: 8px 10px;
+  background: #2d8a4f;
+  font-size: 0.82rem;
+}
+
 .upload-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -323,6 +349,34 @@ h2 {
   font-weight: 900;
 }
 
+.flight-report {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #ecf4f8;
+}
+
+.flight-report div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #405366;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.flight-report strong {
+  color: #17202a;
+  letter-spacing: 0;
+}
+
+.flight-report p {
+  margin: 0;
+  color: #17202a;
+  font-weight: 900;
+}
+
 .game-over-feedback ul {
   display: flex;
   flex-wrap: wrap;
@@ -388,5 +442,9 @@ h2 {
   .control-row,
   .metric-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .daily-challenge {
+    grid-template-columns: 1fr;
   }
 }

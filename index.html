@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Flappy Skill Lab</title>
-    <link rel="stylesheet" href="src/styles.css?v=faster-pending-no-zoom-1" />
+    <link rel="stylesheet" href="src/styles.css?v=motivation-feedback-1" />
   </head>
   <body>
     <main class="app-shell">
@@ -56,6 +56,10 @@
             <p class="player-note">
               This player has played <strong id="playerPlayCount">0</strong> saved rounds on this browser.
             </p>
+            <div class="daily-challenge">
+              <p id="dailyChallengeText">Today's Challenge: Normal Speed, score 50.</p>
+              <button id="dailyChallengeButton" type="button">Daily Challenge</button>
+            </div>
             <div class="speed-options" role="group" aria-label="Speed level">
               <label><input type="radio" name="speed" value="slow" /> Slow</label>
               <label><input type="radio" name="speed" value="normal" checked /> Normal</label>
@@ -95,6 +99,9 @@
               <div><dt>Survival time</dt><dd id="survivalTime">--</dd></div>
               <div><dt>Score</dt><dd id="finalScore">--</dd></div>
               <div><dt>Best score</dt><dd id="bestScore">--</dd></div>
+              <div><dt>Longest time</dt><dd id="bestSurvival">--</dd></div>
+              <div><dt>Best stability</dt><dd id="bestStability">--</dd></div>
+              <div><dt>Rank</dt><dd id="rankValue">--</dd></div>
               <div><dt>Achievements</dt><dd id="achievementCount">--</dd></div>
               <div><dt>Clicks per second</dt><dd id="clicksPerSecond">--</dd></div>
               <div><dt>Avg height error</dt><dd id="averageError">--</dd></div>
@@ -105,6 +112,13 @@
             <div class="game-over-feedback">
               <p id="encouragementText">Play a round to see feedback.</p>
               <p id="analysisText">Analysis appears only after game over.</p>
+              <p id="recordText">Personal best feedback appears here.</p>
+              <div class="flight-report" aria-label="Flight skill report">
+                <div><span>Stability</span><strong id="stabilityStars">-----</strong></div>
+                <div><span>Control</span><strong id="controlStars">-----</strong></div>
+                <div><span>Rhythm</span><strong id="rhythmStars">-----</strong></div>
+                <p id="playerTypeText">Player type appears after game over.</p>
+              </div>
               <ul id="achievementList" aria-label="Achievements"></ul>
             </div>
           </section>
@@ -127,6 +141,6 @@
       </section>
     </main>
 
-    <script src="src/app.js?v=chunk-verified-upload-1"></script>
+    <script src="src/app.js?v=motivation-feedback-1"></script>
   </body>
 </html>
