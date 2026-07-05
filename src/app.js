@@ -29,6 +29,10 @@ const UPLOAD_CHUNK_SIZE = 500;
 const COMPLETE_UPLOAD_ATTEMPTS = 3;
 const VERIFY_RETRIES = 2;
 const VERIFY_WAIT_MS = 700;
+const VERIFY_AFTER_SEND_MS = 12000;
+const RESEND_PENDING_AFTER_MS = 180000;
+const PENDING_SENDS_PER_TICK = 8;
+const PENDING_VERIFICATIONS_PER_TICK = 12;
 const FORM_POST_WAIT_MS = 650;
 const PENDING_UPLOAD_INTERVAL_MS = 10000;
 
@@ -1141,21 +1145,19 @@ async function processPendingUploads() {
 
   uploadInProgress = true;
   try {
-    const uploadBatch = getPendingUploadOrder();
-    for (const pending of uploadBatch) {
-      const uploaded = await sendPendingUpload(pending);
-      if (uploaded) {
-        pending.attempts += 1;
-        savePendingUploads();
-      }
+    const verifyBatch = getPendingUploadOrder()
+      .filter((pending) => shouldVerifyPending(pending))
+      .slice(0, PENDING_VERIFICATIONS_PER_TICK);
+    if (!verifyBatch.length && pendingUploads.length) {
+      setUploadStatus("Upload sent. Waiting for Google Sheet to finish writing before checking again.");
     }
 
-    for (const pending of uploadBatch) {
+    for (const pending of verifyBatch) {
       if (uploadRerunRequested) {
         break;
       }
       setUploadStatus(`Checking Sheet for ${pending.playerName} #${pending.playerPlayCount}...`);
-      const verified = await verifyGameDeathRow(pending.gameId);
+      const verified = await verifyPendingUpload(pending);
       if (verified) {
         removePendingUpload(pending.gameId);
         setUploadStatus(`Sheet verified: ${pending.playerName} #${pending.playerPlayCount}, ${pending.rows.length} rows.`);
@@ -1168,6 +1170,21 @@ async function processPendingUploads() {
         if (game.gameId === pending.gameId && game.over) {
           gameStatus.textContent = `Game over: ${game.deathReason}. Upload pending retry.`;
         }
+      }
+    }
+
+    const uploadBatch = getPendingUploadOrder();
+    let sentThisTick = 0;
+    for (const pending of uploadBatch) {
+      if (!shouldSendPending(pending) || sentThisTick >= PENDING_SENDS_PER_TICK) {
+        continue;
+      }
+      const uploaded = await sendPendingUpload(pending);
+      if (uploaded) {
+        pending.attempts += 1;
+        pending.lastSentAt = new Date().toISOString();
+        savePendingUploads();
+        sentThisTick += 1;
       }
     }
   } finally {
@@ -1185,27 +1202,60 @@ function getPendingUploadOrder() {
   return [...pendingUploads].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+function shouldSendPending(pending) {
+  if (!pending.lastSentAt) {
+    return true;
+  }
+  return Date.now() - Date.parse(pending.lastSentAt) >= RESEND_PENDING_AFTER_MS;
+}
+
+function shouldVerifyPending(pending) {
+  if (!pending.lastSentAt) {
+    return true;
+  }
+  return Date.now() - Date.parse(pending.lastSentAt) >= VERIFY_AFTER_SEND_MS;
+}
+
 async function sendPendingUpload(pending) {
-  const chunkCount = Math.ceil(pending.rows.length / UPLOAD_CHUNK_SIZE);
-  for (let index = 0; index < pending.rows.length; index += UPLOAD_CHUNK_SIZE) {
-    const chunk = pending.rows.slice(index, index + UPLOAD_CHUNK_SIZE);
-    const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
-    const firstFrame = chunk[0]?.frame ?? "";
-    const lastFrame = chunk[chunk.length - 1]?.frame ?? "";
-    const ok = await uploadRows(chunk, {
+  const chunks = getPendingChunks(pending);
+  pending.chunkKeys = chunks.map((chunk) => chunk.key);
+  pending.chunkSize = UPLOAD_CHUNK_SIZE;
+  savePendingUploads();
+
+  for (const chunkInfo of chunks) {
+    const ok = await uploadRows(chunkInfo.rows, {
       automatic: true,
       silentWhenMissing: true,
-      chunkKey: `${pending.gameId}|${chunkNumber}|${chunk.length}|${firstFrame}|${lastFrame}`,
-      chunkNumber,
-      chunkCount,
-      statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkNumber}/${chunkCount}...`,
-      successMessage: `Pending complete round chunk sent ${chunkNumber}/${chunkCount}: ${index + chunk.length}/${pending.rows.length} rows.`,
+      chunkKey: chunkInfo.key,
+      chunkNumber: chunkInfo.number,
+      chunkCount: chunks.length,
+      statusMessage: `Sending pending complete round ${pending.playerName} #${pending.playerPlayCount}: chunk ${chunkInfo.number}/${chunks.length}...`,
+      successMessage: `Pending complete round chunk sent ${chunkInfo.number}/${chunks.length}: ${chunkInfo.end}/${pending.rows.length} rows.`,
     });
     if (!ok) {
       return false;
     }
   }
   return true;
+}
+
+function getPendingChunks(pending) {
+  const chunks = [];
+  const chunkCount = Math.ceil(pending.rows.length / UPLOAD_CHUNK_SIZE);
+  for (let index = 0; index < pending.rows.length; index += UPLOAD_CHUNK_SIZE) {
+    const chunk = pending.rows.slice(index, index + UPLOAD_CHUNK_SIZE);
+    const chunkNumber = Math.floor(index / UPLOAD_CHUNK_SIZE) + 1;
+    const firstFrame = chunk[0]?.frame ?? "";
+    const lastFrame = chunk[chunk.length - 1]?.frame ?? "";
+    chunks.push({
+      rows: chunk,
+      number: chunkNumber,
+      end: index + chunk.length,
+      key: `${pending.gameId}|${chunkNumber}|${chunk.length}|${firstFrame}|${lastFrame}`,
+      total: chunkCount,
+    });
+  }
+  return chunks;
 }
 
 function removePendingUpload(gameId) {
@@ -1233,6 +1283,54 @@ async function verifyGameDeathRow(gameId) {
     await wait(VERIFY_WAIT_MS);
   }
   return false;
+}
+
+async function verifyPendingUpload(pending) {
+  const endpointVerified = await queryUploadEndpointForVerification(pending);
+  if (endpointVerified) {
+    return true;
+  }
+  return verifyGameDeathRow(pending.gameId);
+}
+
+function queryUploadEndpointForVerification(pending) {
+  return new Promise((resolve) => {
+    const endpoint = getUploadEndpoint();
+    const chunkKeys = pending.chunkKeys || getPendingChunks(pending).map((chunk) => chunk.key);
+    if (!endpoint || !chunkKeys.length) {
+      resolve(false);
+      return;
+    }
+
+    const callbackName = `flappyUploadVerify_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const cleanup = () => {
+      delete window[callbackName];
+      script.remove();
+    };
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve(false);
+    }, 7000);
+
+    window[callbackName] = (response) => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      resolve(Boolean(response?.verified));
+    };
+
+    script.onerror = () => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      resolve(false);
+    };
+    script.src =
+      `${endpoint}?callback=${encodeURIComponent(callbackName)}` +
+      `&game_id=${encodeURIComponent(pending.gameId)}` +
+      `&chunk_keys=${encodeURIComponent(chunkKeys.join(","))}` +
+      `&cachebust=${Date.now()}`;
+    document.head.appendChild(script);
+  });
 }
 
 function querySheetForDeathRow(gameId) {

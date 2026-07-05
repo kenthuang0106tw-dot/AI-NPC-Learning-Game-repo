@@ -33,6 +33,28 @@ function parsePayload(e) {
   return JSON.parse(e.postData.contents);
 }
 
+function doGet(e) {
+  const callback = e.parameter.callback || "";
+  const gameId = e.parameter.game_id || "";
+  const chunkKeys = String(e.parameter.chunk_keys || "")
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean);
+  const spreadsheet = SpreadsheetApp.openById(SHEET_ID);
+  const result = verifyUpload(spreadsheet, gameId, chunkKeys);
+  const body = JSON.stringify(result);
+
+  if (callback) {
+    return ContentService
+      .createTextOutput(`${callback}(${body});`)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
+  return ContentService
+    .createTextOutput(body)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function doPost(e) {
   const payload = parsePayload(e);
   const spreadsheet = SpreadsheetApp.openById(SHEET_ID);
@@ -79,6 +101,53 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function verifyUpload(spreadsheet, gameId, chunkKeys) {
+  if (chunkKeys.length > 0) {
+    const chunkSheet = spreadsheet.getSheetByName(CHUNK_SHEET_NAME);
+    if (chunkSheet && areChunksUploaded(chunkSheet, chunkKeys)) {
+      return { verified: true, method: "chunks" };
+    }
+  }
+
+  if (gameId && hasDeathRow(spreadsheet, gameId)) {
+    return { verified: true, method: "death_row" };
+  }
+
+  return { verified: false };
+}
+
+function areChunksUploaded(sheet, chunkKeys) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return false;
+  }
+
+  const foundKeys = new Set();
+  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  values.forEach((row) => foundKeys.add(row[0]));
+  return chunkKeys.every((key) => foundKeys.has(key));
+}
+
+function hasDeathRow(spreadsheet, gameId) {
+  const sheet = spreadsheet.getSheetByName(SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) {
+    return false;
+  }
+
+  const matches = sheet
+    .getRange(2, 1, sheet.getLastRow() - 1, 1)
+    .createTextFinder(gameId)
+    .matchEntireCell(true)
+    .findAll();
+
+  return matches.some((cell) => {
+    const row = cell.getRow();
+    const isDead = sheet.getRange(row, 17).getValue();
+    const deathReason = sheet.getRange(row, 18).getValue();
+    return Number(isDead) === 1 && deathReason && deathReason !== "none";
+  });
 }
 
 function getChunkSheet(spreadsheet) {
