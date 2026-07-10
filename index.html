@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>飛行技巧實驗室</title>
-    <link rel="stylesheet" href="src/styles.css?v=fun-feedback-1" />
+    <link rel="stylesheet" href="src/styles.css?v=full-hangar-1" />
   </head>
   <body>
     <main class="app-shell">
@@ -35,6 +35,7 @@
             <span>空白鍵</span>
             <span>滑鼠點擊</span>
             <span>手機觸控</span>
+            <span id="roundCoinValue">本局 +0 金幣</span>
             <button id="soundButton" class="sound-toggle" type="button" aria-pressed="true">音效：開</button>
           </div>
 
@@ -66,6 +67,12 @@
               <p id="dailyChallengeText">今日挑戰：普通速度，目標 50 分。</p>
               <button id="dailyChallengeButton" type="button">今日挑戰</button>
             </div>
+            <details class="skin-shop">
+              <summary>飛行機庫 · <strong id="coinBalance">0</strong> 金幣</summary>
+              <p class="shop-note">收集載具、配色、帽子、尾焰與天空。全部只改外觀，不影響遊戲能力。</p>
+              <div id="shopTabs" class="shop-tabs" role="tablist" aria-label="機庫商品分類"></div>
+              <div id="shopItemList" class="skin-shop-grid" aria-label="機庫商品列表"></div>
+            </details>
           </section>
 
           <section>
@@ -143,6 +150,6 @@
       </details>
     </main>
 
-    <script src="src/app.js?v=fun-feedback-1"></script>
+    <script src="src/app.js?v=full-hangar-1"></script>
   </body>
 </html>

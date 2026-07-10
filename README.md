@@ -29,6 +29,8 @@ Visual upgrades are feedback only. Background color changes, bird skins, animati
 
 Moment-to-moment feedback also includes optional procedural sound effects, mobile vibration, an on-screen score-milestone meter, and live record/achievement celebrations. The `音效` toggle controls both sound and vibration and is remembered on the device. These effects are motivational feedback only and do not change gameplay or research variables.
 
+Players also earn local cosmetic coins: every passed pipe earns 1 coin and a centered perfect pass earns 2 coins. Coins are banked only after a completed round and can buy items in the flight hangar. The hangar includes bird colors, hats, trails, sky backgrounds, paper planes, gliders, propeller planes, jets, broomsticks, UFOs, rockets, and dragons. Purchased and equipped items are saved in the player's browser profile. Coins never appear in the flight path, and every vehicle keeps the same invisible collision circle, physics, score rules, and research data.
+
 The dashboard also keeps each player's best score and unlocked achievements in browser `localStorage`.
 
 ## Data Collected

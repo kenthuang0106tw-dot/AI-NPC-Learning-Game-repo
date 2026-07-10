@@ -40,6 +40,53 @@ const FORM_POST_WAIT_MS = 10000;
 const PENDING_UPLOAD_INTERVAL_MS = 10000;
 const GLOBAL_BEST_REFRESH_MS = 60000;
 const SCORE_MILESTONES = [1, 5, 10, 20, 30, 50, 70, 90, 120, 150];
+const SKIN_CATALOG = [
+  { id: "classic", name: "經典黃", price: 0, body: "#ffd84d", wing: "#f6c343", accent: "#2563eb" },
+  { id: "ocean", name: "海洋藍", price: 15, body: "#7dd3fc", wing: "#2563eb", accent: "#0e7490" },
+  { id: "berry", name: "莓果紅", price: 35, body: "#fda4af", wing: "#e11d48", accent: "#9f1239" },
+  { id: "mint", name: "薄荷綠", price: 60, body: "#99f6e4", wing: "#14b8a6", accent: "#0f766e" },
+  { id: "royal", name: "皇家紫", price: 100, body: "#ddd6fe", wing: "#8b5cf6", accent: "#5b21b6" },
+  { id: "galaxy", name: "銀河黑", price: 160, body: "#312e81", wing: "#c084fc", accent: "#facc15" },
+];
+const VEHICLE_CATALOG = [
+  { id: "bird", name: "經典小鳥", price: 0, icon: "🐦", primary: "#ffd84d", secondary: "#f6c343" },
+  { id: "paper", name: "紙飛機", price: 30, icon: "✈️", primary: "#f8fafc", secondary: "#94a3b8" },
+  { id: "glider", name: "滑翔機", price: 80, icon: "🪽", primary: "#e2e8f0", secondary: "#38bdf8" },
+  { id: "propeller", name: "螺旋槳飛機", price: 150, icon: "🛩️", primary: "#f97316", secondary: "#fde68a" },
+  { id: "jet", name: "噴射機", price: 300, icon: "✈️", primary: "#64748b", secondary: "#38bdf8" },
+  { id: "broom", name: "魔法掃把", price: 420, icon: "🧹", primary: "#92400e", secondary: "#fbbf24" },
+  { id: "ufo", name: "神秘飛碟", price: 600, icon: "🛸", primary: "#94a3b8", secondary: "#a78bfa" },
+  { id: "rocket", name: "太空火箭", price: 900, icon: "🚀", primary: "#f8fafc", secondary: "#ef4444" },
+  { id: "dragon", name: "天空飛龍", price: 1200, icon: "🐉", primary: "#22c55e", secondary: "#facc15" },
+];
+const HAT_CATALOG = [
+  { id: "none", name: "不戴帽子", price: 0, icon: "✨" },
+  { id: "pilot", name: "飛行護目鏡", price: 40, icon: "🥽" },
+  { id: "crown", name: "天空皇冠", price: 120, icon: "👑" },
+  { id: "wizard", name: "魔法帽", price: 200, icon: "🧙" },
+  { id: "tophat", name: "紳士高帽", price: 260, icon: "🎩" },
+];
+const TRAIL_CATALOG = [
+  { id: "none", name: "沒有尾焰", price: 0, icon: "➖" },
+  { id: "bubbles", name: "泡泡軌跡", price: 60, icon: "🫧" },
+  { id: "rainbow", name: "彩虹尾焰", price: 150, icon: "🌈" },
+  { id: "stardust", name: "星塵尾焰", price: 300, icon: "⭐" },
+  { id: "fire", name: "烈焰尾焰", price: 450, icon: "🔥" },
+];
+const BACKGROUND_CATALOG = [
+  { id: "classic", name: "自動天空", price: 0, icon: "☀️" },
+  { id: "sunset", name: "夕陽海岸", price: 100, icon: "🌅" },
+  { id: "night", name: "星空之夜", price: 200, icon: "🌙" },
+  { id: "aurora", name: "極光世界", price: 400, icon: "🌌" },
+  { id: "candy", name: "糖果天空", price: 500, icon: "🍬" },
+];
+const SHOP_CATEGORIES = {
+  vehicle: { label: "載具", catalog: VEHICLE_CATALOG, ownedKey: "ownedVehicles", equippedKey: "equippedVehicle" },
+  skin: { label: "配色", catalog: SKIN_CATALOG, ownedKey: "ownedSkins", equippedKey: "equippedSkin" },
+  hat: { label: "帽子", catalog: HAT_CATALOG, ownedKey: "ownedHats", equippedKey: "equippedHat" },
+  trail: { label: "尾焰", catalog: TRAIL_CATALOG, ownedKey: "ownedTrails", equippedKey: "equippedTrail" },
+  background: { label: "天空", catalog: BACKGROUND_CATALOG, ownedKey: "ownedBackgrounds", equippedKey: "equippedBackground" },
+};
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -98,6 +145,12 @@ const ACHIEVEMENTS = [
   { name: "Fast Explorer", title: "快速探索", description: "完成快速模式一局。" },
   { name: "Speed Explorer", title: "三速探索者", description: "完成慢速、普通、快速三種模式。" },
   { name: "Daily Challenger", title: "每日挑戰者", description: "完成每日挑戰。" },
+  { name: "First Purchase", title: "第一次購物", description: "購買第一款造型。" },
+  { name: "Skin Collector", title: "造型收藏家", description: "擁有 5 件機庫商品。" },
+  { name: "Wardrobe Master", title: "衣櫃大師", description: "擁有 15 件機庫商品。" },
+  { name: "Vehicle Owner", title: "新載具交車", description: "購買第一台新載具。" },
+  { name: "UFO Pilot", title: "飛碟駕駛員", description: "購買神秘飛碟。" },
+  { name: "Rocket Pilot", title: "火箭駕駛員", description: "購買太空火箭。" },
 ];
 
 const canvas = document.querySelector("#gameCanvas");
@@ -111,6 +164,10 @@ const clearButton = document.querySelector("#clearButton");
 const dailyChallengeButton = document.querySelector("#dailyChallengeButton");
 const dailyChallengeText = document.querySelector("#dailyChallengeText");
 const soundButton = document.querySelector("#soundButton");
+const roundCoinValue = document.querySelector("#roundCoinValue");
+const coinBalance = document.querySelector("#coinBalance");
+const shopTabs = document.querySelector("#shopTabs");
+const shopItemList = document.querySelector("#shopItemList");
 const uploadStatus = document.querySelector("#uploadStatus");
 const uploadStatusTop = document.querySelector("#uploadStatusTop");
 const speedInputs = document.querySelectorAll("input[name='speed']");
@@ -157,6 +214,7 @@ let uploadRerunRequested = false;
 let lastCanvasTouchEnd = 0;
 let soundEnabled = localStorage.getItem(SOUND_ENABLED_KEY) !== "false";
 let audioContext = null;
+let activeShopCategory = "vehicle";
 const deviceId = getDeviceId();
 
 const game = {
@@ -194,6 +252,7 @@ const game = {
   liveToast: "",
   liveToastAge: 0,
   recordCelebrated: false,
+  coinsEarned: 0,
   dailyChallengeActive: false,
 };
 
@@ -255,6 +314,9 @@ function playSound(name) {
     playTone(523, 0.12, { volume: 0.032, type: "triangle" });
     playTone(659, 0.12, { delay: 0.08, volume: 0.03, type: "triangle" });
     playTone(784, 0.18, { delay: 0.16, volume: 0.032, type: "triangle" });
+  } else if (name === "purchase") {
+    playTone(740, 0.1, { volume: 0.032, type: "square" });
+    playTone(988, 0.16, { delay: 0.09, volume: 0.026, type: "triangle" });
   } else if (name === "gameOver") {
     playTone(210, 0.28, { endFrequency: 90, volume: 0.04, type: "sawtooth" });
   }
@@ -346,6 +408,17 @@ function getPlayerProfile(name) {
       bestStabilityStd: null,
       achievements: [],
       speedsPlayed: [],
+      coins: 0,
+      ownedSkins: ["classic"],
+      equippedSkin: "classic",
+      ownedVehicles: ["bird"],
+      equippedVehicle: "bird",
+      ownedHats: ["none"],
+      equippedHat: "none",
+      ownedTrails: ["none"],
+      equippedTrail: "none",
+      ownedBackgrounds: ["classic"],
+      equippedBackground: "classic",
     };
   }
   if (!playerProfiles[name]) {
@@ -356,6 +429,17 @@ function getPlayerProfile(name) {
       bestStabilityStd: null,
       achievements: [],
       speedsPlayed: [],
+      coins: 0,
+      ownedSkins: ["classic"],
+      equippedSkin: "classic",
+      ownedVehicles: ["bird"],
+      equippedVehicle: "bird",
+      ownedHats: ["none"],
+      equippedHat: "none",
+      ownedTrails: ["none"],
+      equippedTrail: "none",
+      ownedBackgrounds: ["classic"],
+      equippedBackground: "classic",
     };
   }
   const profile = playerProfiles[name];
@@ -367,7 +451,138 @@ function getPlayerProfile(name) {
     : Number(profile.bestStabilityStd);
   profile.achievements = Array.isArray(profile.achievements) ? profile.achievements : [];
   profile.speedsPlayed = Array.isArray(profile.speedsPlayed) ? profile.speedsPlayed : [];
+  profile.coins = Math.max(0, Math.floor(Number(profile.coins) || 0));
+  profile.ownedSkins = Array.isArray(profile.ownedSkins) ? profile.ownedSkins : ["classic"];
+  profile.ownedSkins = [...new Set(["classic", ...profile.ownedSkins])]
+    .filter((skinId) => SKIN_CATALOG.some((skin) => skin.id === skinId));
+  profile.equippedSkin = profile.ownedSkins.includes(profile.equippedSkin) ? profile.equippedSkin : "classic";
+  normalizeProfileCollection(profile, "ownedVehicles", "equippedVehicle", VEHICLE_CATALOG);
+  normalizeProfileCollection(profile, "ownedHats", "equippedHat", HAT_CATALOG);
+  normalizeProfileCollection(profile, "ownedTrails", "equippedTrail", TRAIL_CATALOG);
+  normalizeProfileCollection(profile, "ownedBackgrounds", "equippedBackground", BACKGROUND_CATALOG);
   return profile;
+}
+
+function normalizeProfileCollection(profile, ownedKey, equippedKey, catalog) {
+  const freeItemId = catalog[0].id;
+  const ownedItems = Array.isArray(profile[ownedKey]) ? profile[ownedKey] : [freeItemId];
+  profile[ownedKey] = [...new Set([freeItemId, ...ownedItems])]
+    .filter((itemId) => catalog.some((item) => item.id === itemId));
+  profile[equippedKey] = profile[ownedKey].includes(profile[equippedKey]) ? profile[equippedKey] : freeItemId;
+}
+
+function getSkinById(skinId) {
+  return SKIN_CATALOG.find((skin) => skin.id === skinId) || SKIN_CATALOG[0];
+}
+
+function getEquippedSkin(playerName = game.playerName || getPlayerName()) {
+  return getSkinById(getPlayerProfile(playerName).equippedSkin);
+}
+
+function getEquippedCatalogItem(categoryName, playerName = game.playerName || getPlayerName()) {
+  const category = SHOP_CATEGORIES[categoryName];
+  const profile = getPlayerProfile(playerName);
+  return category.catalog.find((item) => item.id === profile[category.equippedKey]) || category.catalog[0];
+}
+
+function unlockShopAchievement(profile, achievementName) {
+  if (!profile.achievements.includes(achievementName)) {
+    profile.achievements.push(achievementName);
+  }
+}
+
+function renderSkinShop() {
+  const playerName = getPlayerName();
+  const profile = getPlayerProfile(playerName);
+  coinBalance.textContent = playerName ? profile.coins : 0;
+  shopTabs.innerHTML = "";
+  shopItemList.innerHTML = "";
+
+  for (const [categoryName, category] of Object.entries(SHOP_CATEGORIES)) {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = `shop-tab${activeShopCategory === categoryName ? " active" : ""}`;
+    tab.dataset.shopCategory = categoryName;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(activeShopCategory === categoryName));
+    tab.textContent = category.label;
+    shopTabs.appendChild(tab);
+  }
+
+  const category = SHOP_CATEGORIES[activeShopCategory];
+  for (const item of category.catalog) {
+    const owned = profile[category.ownedKey].includes(item.id);
+    const equipped = owned && profile[category.equippedKey] === item.id;
+    const card = document.createElement("div");
+    card.className = `skin-card${equipped ? " equipped" : ""}`;
+    const preview = activeShopCategory === "skin"
+      ? `<span class="skin-swatch" style="--skin-body: ${item.body}; --skin-wing: ${item.wing}" aria-hidden="true"></span>`
+      : `<span class="shop-item-icon" aria-hidden="true">${item.icon}</span>`;
+    card.innerHTML = `
+      ${preview}
+      <span class="skin-info">
+        <strong>${item.name}</strong>
+        <button class="skin-buy-button" type="button" data-shop-category="${activeShopCategory}" data-shop-item="${item.id}"
+          ${equipped || game.running || !playerName ? "disabled" : ""}>
+          ${equipped ? "使用中" : owned ? "裝備" : `${item.price} 金幣`}
+        </button>
+      </span>
+    `;
+    shopItemList.appendChild(card);
+  }
+}
+
+function countOwnedShopItems(profile) {
+  return Object.values(SHOP_CATEGORIES)
+    .reduce((total, category) => total + profile[category.ownedKey].length - 1, 0);
+}
+
+function buyOrEquipShopItem(categoryName, itemId) {
+  const playerName = getPlayerName();
+  if (!playerName) {
+    gameStatus.textContent = "請先輸入玩家名字，再使用飛行機庫。";
+    playerNameInput.focus();
+    return;
+  }
+  if (game.running) {
+    gameStatus.textContent = "飛行中不能更換造型，這局結束後再逛商店。";
+    return;
+  }
+
+  game.playerName = playerName;
+
+  const category = SHOP_CATEGORIES[categoryName];
+  const item = category?.catalog.find((candidate) => candidate.id === itemId);
+  if (!category || !item) {
+    return;
+  }
+  const profile = getPlayerProfile(playerName);
+  const owned = profile[category.ownedKey].includes(item.id);
+  if (!owned) {
+    if (profile.coins < item.price) {
+      gameStatus.textContent = `還差 ${item.price - profile.coins} 枚金幣才能購買「${item.name}」。`;
+      return;
+    }
+    profile.coins -= item.price;
+    profile[category.ownedKey].push(item.id);
+    unlockShopAchievement(profile, "First Purchase");
+    const ownedItemCount = countOwnedShopItems(profile);
+    if (ownedItemCount >= 5) unlockShopAchievement(profile, "Skin Collector");
+    if (ownedItemCount >= 15) unlockShopAchievement(profile, "Wardrobe Master");
+    if (categoryName === "vehicle") unlockShopAchievement(profile, "Vehicle Owner");
+    if (categoryName === "vehicle" && item.id === "ufo") unlockShopAchievement(profile, "UFO Pilot");
+    if (categoryName === "vehicle" && item.id === "rocket") unlockShopAchievement(profile, "Rocket Pilot");
+    gameStatus.textContent = `購買成功！已裝備「${item.name}」。`;
+    playSound("purchase");
+    vibrate([20, 28, 30]);
+  } else {
+    gameStatus.textContent = `已裝備「${item.name}」。`;
+    playSound("pass");
+  }
+  profile[category.equippedKey] = item.id;
+  savePlayerProfiles();
+  updatePlayerCountDisplay();
+  drawScene();
 }
 
 function getDeviceId() {
@@ -434,6 +649,7 @@ function updatePlayerCountDisplay() {
   if (achievementCount) {
     achievementCount.textContent = name ? formatAchievementProgress(profile) : "--";
   }
+  renderSkinShop();
   renderAchievements();
 }
 
@@ -529,6 +745,7 @@ function resetGame() {
   game.liveToast = "";
   game.liveToastAge = 0;
   game.recordCelebrated = false;
+  game.coinsEarned = 0;
 
   gameStatus.textContent = "準備好了，點一下就飛。";
   updateLiveMetrics(0);
@@ -548,6 +765,7 @@ function startGame() {
   game.playerPlayCount = playerCounts[game.playerName] || 1;
   game.dailyChallengeActive = game.dailyChallengeActive;
   game.running = true;
+  renderSkinShop();
   ensureAudioContext();
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
@@ -682,6 +900,8 @@ function updateScore() {
       game.score += 1;
       const centerError = Math.abs(game.birdY - pipe.gapCenter);
       const isPerfect = centerError <= PERFECT_FLIGHT_ERROR;
+      const coinsGained = isPerfect ? 2 : 1;
+      game.coinsEarned += coinsGained;
       if (isPerfect) {
         game.perfectCombo += 1;
         game.bestPerfectCombo = Math.max(game.bestPerfectCombo, game.perfectCombo);
@@ -703,7 +923,7 @@ function updateScore() {
         x: BIRD_X + 38,
         y: game.birdY,
         age: 0,
-        label: isPerfect ? `完美 x${game.perfectCombo}` : "",
+        label: isPerfect ? `完美 x${game.perfectCombo} · +${coinsGained} 金幣` : `+${coinsGained} 金幣`,
       });
       game.pipeEvent = { pipe, result: "pass" };
       checkAchievements();
@@ -1105,6 +1325,11 @@ function updatePlayerProgress(summary) {
   const oldBestScore = profile.bestScore;
   const oldBestSurvival = profile.bestSurvivalTime;
 
+  if (game.coinsEarned > 0) {
+    profile.coins += game.coinsEarned;
+    summary.recordMessages.push(`本局獲得 ${game.coinsEarned} 枚金幣，已存入造型商店。`);
+  }
+
   if (!profile.speedsPlayed.includes(game.speedLevel)) {
     profile.speedsPlayed.push(game.speedLevel);
   }
@@ -1476,6 +1701,7 @@ function updateLiveMetrics(elapsedSeconds) {
   timeValue.textContent = `${elapsedSeconds.toFixed(1)} 秒`;
   frameValue.textContent = game.frame;
   savedRowsValue.textContent = allLogs.length;
+  roundCoinValue.textContent = `本局 +${game.coinsEarned} 金幣`;
 }
 
 function drawScene() {
@@ -1483,7 +1709,8 @@ function drawScene() {
   drawBackground();
   drawPipes();
   drawPassEffects();
-  drawBird();
+  drawEquippedTrail();
+  drawFlyer();
   drawGround();
   drawHud();
 }
@@ -1545,6 +1772,14 @@ function drawBackground() {
     ctx.fillStyle = style.cloudColor;
     drawCloud(90, 90);
     drawCloud(330, 150);
+    if (style.candy) {
+      for (let i = 0; i < 7; i += 1) {
+        ctx.fillStyle = i % 2 === 0 ? "rgba(244, 114, 182, 0.32)" : "rgba(129, 140, 248, 0.28)";
+        ctx.beginPath();
+        ctx.arc(38 + i * 72, 210 + (i % 3) * 38, 14 + (i % 2) * 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     if (style.sun) {
       ctx.fillStyle = style.sun;
       ctx.beginPath();
@@ -1555,6 +1790,50 @@ function drawBackground() {
 }
 
 function getBackgroundStyle() {
+  const selectedBackground = getEquippedCatalogItem("background");
+  if (selectedBackground.id === "sunset") {
+    return {
+      skyTop: "#fb7185",
+      skyBottom: "#fed7aa",
+      cloudColor: "rgba(255, 255, 255, 0.58)",
+      stars: false,
+      sun: "rgba(255, 241, 188, 0.9)",
+    };
+  }
+  if (selectedBackground.id === "night") {
+    return {
+      skyTop: "#020617",
+      skyBottom: "#312e81",
+      cloudColor: "rgba(255, 255, 255, 0.3)",
+      stars: true,
+      starCount: 34,
+      moon: true,
+      aurora: false,
+      meteors: true,
+    };
+  }
+  if (selectedBackground.id === "aurora") {
+    return {
+      skyTop: "#042f2e",
+      skyBottom: "#312e81",
+      cloudColor: "rgba(255, 255, 255, 0.3)",
+      stars: true,
+      starCount: 38,
+      moon: true,
+      aurora: true,
+      meteors: false,
+    };
+  }
+  if (selectedBackground.id === "candy") {
+    return {
+      skyTop: "#fbcfe8",
+      skyBottom: "#c7d2fe",
+      cloudColor: "rgba(255, 255, 255, 0.75)",
+      stars: false,
+      sun: "rgba(253, 224, 71, 0.72)",
+      candy: true,
+    };
+  }
   if (game.score >= 150) {
     return {
       skyTop: "#f97316",
@@ -1662,11 +1941,303 @@ function drawPipes() {
   }
 }
 
+function drawFlyer() {
+  const vehicle = getEquippedCatalogItem("vehicle");
+  if (vehicle.id === "bird") {
+    drawBird();
+  } else {
+    drawVehicle(vehicle);
+  }
+  drawEquippedHat();
+}
+
+function drawVehicle(vehicle) {
+  const skin = getEquippedSkin();
+  const primary = skin.id === "classic" ? vehicle.primary : skin.body;
+  const secondary = skin.id === "classic" ? vehicle.secondary : skin.wing;
+  const accent = skin.id === "classic" ? "#17202a" : skin.accent;
+  const deathTilt = game.over ? 0.85 : 0;
+  ctx.save();
+  ctx.translate(BIRD_X, game.birdY);
+  ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)) + deathTilt);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  if (vehicle.id === "paper") {
+    ctx.fillStyle = primary;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-20, -11);
+    ctx.lineTo(24, 0);
+    ctx.lineTo(-18, 12);
+    ctx.lineTo(-7, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-7, 1);
+    ctx.lineTo(12, 0);
+    ctx.stroke();
+  } else if (vehicle.id === "glider") {
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.moveTo(-22, -5);
+    ctx.lineTo(12, -13);
+    ctx.lineTo(23, -4);
+    ctx.lineTo(5, 0);
+    ctx.lineTo(19, 10);
+    ctx.lineTo(-17, 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.ellipse(5, 0, 9, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (vehicle.id === "propeller") {
+    ctx.fillStyle = secondary;
+    ctx.fillRect(-8, -18, 9, 36);
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 21, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#bae6fd";
+    ctx.beginPath();
+    ctx.arc(6, -5, 5, Math.PI, 0);
+    ctx.fill();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    const propellerAngle = game.frame * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(23, Math.sin(propellerAngle) * 13);
+    ctx.lineTo(23, -Math.sin(propellerAngle) * 13);
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.arc(22, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (vehicle.id === "jet") {
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.moveTo(-22, -7);
+    ctx.lineTo(25, 0);
+    ctx.lineTo(-22, 8);
+    ctx.lineTo(-11, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.moveTo(-8, -2);
+    ctx.lineTo(2, -18);
+    ctx.lineTo(9, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-8, 2);
+    ctx.lineTo(2, 18);
+    ctx.lineTo(9, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#67e8f9";
+    ctx.fillRect(-25, -4, 7, 8);
+  } else if (vehicle.id === "ufo") {
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.ellipse(0, 3, 24, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.arc(0, 1, 11, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "rgba(103, 232, 249, 0.82)";
+    for (let light = -1; light <= 1; light += 1) {
+      ctx.beginPath();
+      ctx.arc(light * 11, 5, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (vehicle.id === "rocket") {
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.moveTo(-18, -7);
+    ctx.lineTo(-28, -14);
+    ctx.lineTo(-25, 0);
+    ctx.lineTo(-28, 14);
+    ctx.lineTo(-18, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.moveTo(-19, -10);
+    ctx.lineTo(15, -10);
+    ctx.quadraticCurveTo(29, 0, 15, 10);
+    ctx.lineTo(-19, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#38bdf8";
+    ctx.beginPath();
+    ctx.arc(8, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = game.frame % 4 < 2 ? "#fde047" : "#fb923c";
+    ctx.beginPath();
+    ctx.moveTo(-20, -6);
+    ctx.lineTo(-36 - (game.frame % 3) * 3, 0);
+    ctx.lineTo(-20, 6);
+    ctx.closePath();
+    ctx.fill();
+  } else if (vehicle.id === "dragon") {
+    const wingBeat = Math.sin(game.frame * 0.3) * 6;
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.moveTo(-8, -4);
+    ctx.lineTo(-18, -20 - wingBeat);
+    ctx.lineTo(6, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-8, 4);
+    ctx.lineTo(-18, 20 + wingBeat);
+    ctx.lineTo(6, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 19, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(17, -3, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-16, 1);
+    ctx.quadraticCurveTo(-27, 10, -33, 1);
+    ctx.stroke();
+    ctx.fillStyle = "#111827";
+    ctx.beginPath();
+    ctx.arc(20, -6, 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (vehicle.id === "broom") {
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-23, 7);
+    ctx.lineTo(23, -3);
+    ctx.stroke();
+    ctx.strokeStyle = secondary;
+    ctx.lineWidth = 3;
+    for (let bristle = -1; bristle <= 1; bristle += 1) {
+      ctx.beginPath();
+      ctx.moveTo(-20, 6);
+      ctx.lineTo(-34, bristle * 7 + 7);
+      ctx.stroke();
+    }
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.arc(3, -10, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = primary;
+    ctx.fillRect(-2, -5, 12, 13);
+  }
+  ctx.restore();
+  drawDeathEffect();
+}
+
+function drawEquippedTrail() {
+  const trail = getEquippedCatalogItem("trail");
+  if (trail.id === "none" || !game.running) {
+    return;
+  }
+  ctx.save();
+  for (let particle = 0; particle < 7; particle += 1) {
+    const x = BIRD_X - 24 - particle * 9;
+    const y = game.birdY + Math.sin(game.frame * 0.18 + particle) * 7;
+    const fade = 1 - particle / 8;
+    ctx.globalAlpha = fade * 0.8;
+    if (trail.id === "bubbles") {
+      ctx.strokeStyle = "#e0f2fe";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 3 + (particle % 3), 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (trail.id === "rainbow") {
+      const colors = ["#ef4444", "#facc15", "#22c55e", "#3b82f6", "#a855f7"];
+      ctx.fillStyle = colors[particle % colors.length];
+      ctx.fillRect(x, y - 3, 11, 6);
+    } else if (trail.id === "stardust") {
+      ctx.fillStyle = particle % 2 ? "#fef08a" : "#ffffff";
+      ctx.font = `${10 + (particle % 3) * 2}px system-ui`;
+      ctx.fillText("★", x, y);
+    } else if (trail.id === "fire") {
+      ctx.fillStyle = particle % 2 ? "#f97316" : "#fde047";
+      ctx.beginPath();
+      ctx.arc(x, y, 6 - particle * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawEquippedHat() {
+  const hat = getEquippedCatalogItem("hat");
+  if (hat.id === "none") {
+    return;
+  }
+  const deathTilt = game.over ? 0.85 : 0;
+  ctx.save();
+  ctx.translate(BIRD_X, game.birdY);
+  ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)) + deathTilt);
+  if (hat.id === "pilot") {
+    ctx.strokeStyle = "#451a03";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(-7, -16, 6, 0, Math.PI * 2);
+    ctx.arc(7, -16, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-1, -16);
+    ctx.lineTo(1, -16);
+    ctx.stroke();
+  } else if (hat.id === "crown") {
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.moveTo(-13, -17);
+    ctx.lineTo(-10, -31);
+    ctx.lineTo(-3, -23);
+    ctx.lineTo(2, -33);
+    ctx.lineTo(8, -23);
+    ctx.lineTo(14, -31);
+    ctx.lineTo(12, -17);
+    ctx.closePath();
+    ctx.fill();
+  } else if (hat.id === "wizard") {
+    ctx.fillStyle = "#6d28d9";
+    ctx.beginPath();
+    ctx.moveTo(-15, -17);
+    ctx.lineTo(3, -42);
+    ctx.lineTo(12, -17);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(-18, -19, 34, 5);
+    ctx.fillStyle = "#fde047";
+    ctx.font = "10px system-ui";
+    ctx.fillText("★", -1, -24);
+  } else if (hat.id === "tophat") {
+    ctx.fillStyle = "#17202a";
+    ctx.fillRect(-11, -35, 22, 18);
+    ctx.fillRect(-17, -19, 34, 5);
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(-11, -22, 22, 4);
+  }
+  ctx.restore();
+}
+
 function drawBird() {
   const skinLevel = getBirdSkinLevel();
+  const equippedSkin = getEquippedSkin(game.playerName || getPlayerName());
+  const hasEquippedHat = getEquippedCatalogItem("hat").id !== "none";
   const wingLift = Math.sin(game.frame * 0.38) * 5;
   const deathTilt = game.over ? 0.85 : 0;
-  const bodyColor = {
+  const progressBodyColor = {
     1: "#ffd84d",
     2: "#ffd84d",
     3: "#fef3c7",
@@ -1674,7 +2245,7 @@ function drawBird() {
     5: "#ddd6fe",
     6: "#fef9c3",
   }[skinLevel] || "#fef9c3";
-  const wingColor = {
+  const progressWingColor = {
     1: "#f6c343",
     2: "#60a5fa",
     3: "#60a5fa",
@@ -1682,6 +2253,8 @@ function drawBird() {
     5: "#a78bfa",
     6: "#fbbf24",
   }[skinLevel] || "#fbbf24";
+  const bodyColor = equippedSkin.id === "classic" ? progressBodyColor : equippedSkin.body;
+  const wingColor = equippedSkin.id === "classic" ? progressWingColor : equippedSkin.wing;
   ctx.save();
   ctx.translate(BIRD_X, game.birdY);
   ctx.rotate(Math.max(-0.45, Math.min(0.55, game.birdVy / 14)) + deathTilt);
@@ -1695,14 +2268,14 @@ function drawBird() {
   ctx.ellipse(-8, 6 + wingLift, 9, 5, -0.5, 0, Math.PI * 2);
   ctx.fill();
 
-  if (skinLevel >= 2) {
-    ctx.fillStyle = "#2563eb";
+  if (!hasEquippedHat && skinLevel >= 2) {
+    ctx.fillStyle = equippedSkin.accent;
     ctx.beginPath();
     ctx.arc(-2, -12, 12, Math.PI, 0);
     ctx.fill();
   }
 
-  if (skinLevel >= 3) {
+  if (!hasEquippedHat && skinLevel >= 3) {
     ctx.strokeStyle = "#111827";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1720,13 +2293,13 @@ function drawBird() {
   }
 
   if (skinLevel >= 4) {
-    ctx.strokeStyle = "#0f766e";
+    ctx.strokeStyle = equippedSkin.accent;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(-14, 4);
     ctx.quadraticCurveTo(-28, 10 + wingLift * 0.2, -34, 0);
     ctx.stroke();
-    ctx.fillStyle = "#14b8a6";
+    ctx.fillStyle = equippedSkin.wing;
     ctx.fillRect(-16, -2, 15, 6);
   }
 
@@ -1773,6 +2346,10 @@ function drawBird() {
   ctx.fill();
   ctx.restore();
 
+  drawDeathEffect();
+}
+
+function drawDeathEffect() {
   if (game.over) {
     const age = Math.min(1, (performance.now() - game.deathAnimationStarted) / 500);
     ctx.save();
@@ -1798,6 +2375,7 @@ function drawHud() {
   const allBest = getAllUsersBestScore();
   const myBest = game.playerName ? Math.max(profile.bestScore, game.score) : 0;
   const rankName = getRankName(myBest);
+  const equippedVehicle = getEquippedCatalogItem("vehicle");
   const finalMilestone = SCORE_MILESTONES[SCORE_MILESTONES.length - 1];
   const nextMilestone = SCORE_MILESTONES.find((score) => score > game.score) || finalMilestone;
   const previousMilestone = [...SCORE_MILESTONES].reverse().find((score) => score <= game.score) || 0;
@@ -1809,7 +2387,7 @@ function drawHud() {
   ctx.font = "700 20px system-ui";
   ctx.fillText(`分數：${game.score}`, 28, 42);
   ctx.font = "700 14px system-ui";
-  ctx.fillText(`速度：${formatSpeedLevel(game.speedLevel)}`, 28, 64);
+  ctx.fillText(`速度：${formatSpeedLevel(game.speedLevel)} · ${equippedVehicle.name}`, 28, 64, 194);
   if (game.playerName) {
     ctx.fillText(`${game.playerName} 第 ${game.playerPlayCount} 局`, 28, 84, 180);
   }
@@ -2380,6 +2958,19 @@ exportButton.addEventListener("click", exportCsv);
 clearButton.addEventListener("click", clearData);
 dailyChallengeButton.addEventListener("click", enableDailyChallenge);
 soundButton.addEventListener("click", toggleSound);
+shopTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("button[data-shop-category]");
+  if (tab && SHOP_CATEGORIES[tab.dataset.shopCategory]) {
+    activeShopCategory = tab.dataset.shopCategory;
+    renderSkinShop();
+  }
+});
+shopItemList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-shop-item]");
+  if (button) {
+    buyOrEquipShopItem(button.dataset.shopCategory, button.dataset.shopItem);
+  }
+});
 playerNameInput.addEventListener("input", updatePlayerCountDisplay);
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
