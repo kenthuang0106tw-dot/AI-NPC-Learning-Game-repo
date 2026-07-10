@@ -27,6 +27,8 @@ The game is designed so a new player can understand it in less than 10 seconds.
 
 Visual upgrades are feedback only. Background color changes, bird skins, animations, and achievements do not change gravity, pipe speed, pipe gap, pipe distance, collision size, or jump force.
 
+Moment-to-moment feedback also includes optional procedural sound effects, mobile vibration, an on-screen score-milestone meter, and live record/achievement celebrations. The `音效` toggle controls both sound and vibration and is remembered on the device. These effects are motivational feedback only and do not change gameplay or research variables.
+
 The dashboard also keeps each player's best score and unlocked achievements in browser `localStorage`.
 
 ## Data Collected

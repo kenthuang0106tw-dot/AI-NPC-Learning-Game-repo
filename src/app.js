@@ -7,6 +7,7 @@ const PLAYER_COUNTS_KEY = "flappy_skill_lab_player_counts_v1";
 const PLAYER_PROFILES_KEY = "flappy_skill_lab_player_profiles_v1";
 const DEVICE_ID_KEY = "flappy_skill_lab_device_id_v1";
 const LAST_HEIGHT_VARIATION_KEY = "flappy_skill_lab_last_height_variation_v1";
+const SOUND_ENABLED_KEY = "flappy_skill_lab_sound_enabled_v1";
 const DEFAULT_UPLOAD_ENDPOINT =
   "https://script.google.com/macros/s/AKfycby5bcHFz9A9uxOWVfgwbvsANwbBN9pdF5Hi8zXnOgmW8YsucEIjHCFfaf3IW4LK7NX61A/exec";
 const SHEET_ID = "12rOhOWkdhYeDcr_nz-Ao9NEJE7jrw_K_AEgJRwgruUY";
@@ -38,6 +39,7 @@ const PENDING_VERIFICATIONS_PER_TICK = 12;
 const FORM_POST_WAIT_MS = 10000;
 const PENDING_UPLOAD_INTERVAL_MS = 10000;
 const GLOBAL_BEST_REFRESH_MS = 60000;
+const SCORE_MILESTONES = [1, 5, 10, 20, 30, 50, 70, 90, 120, 150];
 
 const SPEED_SETTINGS = {
   slow: { gravity: 0.36, flap: -7.2, pipeSpeed: 2.1 },
@@ -108,6 +110,7 @@ const exportButton = document.querySelector("#exportButton");
 const clearButton = document.querySelector("#clearButton");
 const dailyChallengeButton = document.querySelector("#dailyChallengeButton");
 const dailyChallengeText = document.querySelector("#dailyChallengeText");
+const soundButton = document.querySelector("#soundButton");
 const uploadStatus = document.querySelector("#uploadStatus");
 const uploadStatusTop = document.querySelector("#uploadStatusTop");
 const speedInputs = document.querySelectorAll("input[name='speed']");
@@ -152,6 +155,8 @@ let passEffects = [];
 let uploadInProgress = false;
 let uploadRerunRequested = false;
 let lastCanvasTouchEnd = 0;
+let soundEnabled = localStorage.getItem(SOUND_ENABLED_KEY) !== "false";
+let audioContext = null;
 const deviceId = getDeviceId();
 
 const game = {
@@ -186,8 +191,95 @@ const game = {
   bestPerfectCombo: 0,
   comboMessage: "",
   comboEffectAge: 0,
+  liveToast: "",
+  liveToastAge: 0,
+  recordCelebrated: false,
   dailyChallengeActive: false,
 };
+
+function updateSoundButton() {
+  soundButton.textContent = soundEnabled ? "音效：開" : "音效：關";
+  soundButton.setAttribute("aria-pressed", String(soundEnabled));
+  soundButton.setAttribute("aria-label", soundEnabled ? "關閉音效與震動" : "開啟音效與震動");
+}
+
+function ensureAudioContext() {
+  if (!soundEnabled) {
+    return null;
+  }
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+  return audioContext;
+}
+
+function playTone(frequency, duration, { delay = 0, endFrequency = frequency, volume = 0.035, type = "sine" } = {}) {
+  const context = ensureAudioContext();
+  if (!context) {
+    return;
+  }
+  const startsAt = context.currentTime + delay;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, startsAt);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(40, endFrequency), startsAt + duration);
+  gain.gain.setValueAtTime(0.0001, startsAt);
+  gain.gain.exponentialRampToValueAtTime(volume, startsAt + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startsAt + duration);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(startsAt);
+  oscillator.stop(startsAt + duration + 0.02);
+}
+
+function playSound(name) {
+  if (!soundEnabled) {
+    return;
+  }
+  if (name === "flap") {
+    playTone(330, 0.075, { endFrequency: 520, volume: 0.022, type: "triangle" });
+  } else if (name === "pass") {
+    playTone(620, 0.09, { endFrequency: 820, volume: 0.032 });
+  } else if (name === "perfect") {
+    playTone(660, 0.11, { volume: 0.035, type: "triangle" });
+    playTone(880, 0.13, { delay: 0.07, volume: 0.03, type: "triangle" });
+  } else if (name === "achievement") {
+    playTone(523, 0.12, { volume: 0.032, type: "triangle" });
+    playTone(659, 0.12, { delay: 0.08, volume: 0.03, type: "triangle" });
+    playTone(784, 0.18, { delay: 0.16, volume: 0.032, type: "triangle" });
+  } else if (name === "gameOver") {
+    playTone(210, 0.28, { endFrequency: 90, volume: 0.04, type: "sawtooth" });
+  }
+}
+
+function vibrate(pattern) {
+  if (soundEnabled && navigator.vibrate) {
+    navigator.vibrate(pattern);
+  }
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem(SOUND_ENABLED_KEY, String(soundEnabled));
+  updateSoundButton();
+  if (soundEnabled) {
+    playSound("pass");
+    vibrate(18);
+  }
+}
+
+function showLiveToast(message) {
+  game.liveToast = message;
+  game.liveToastAge = 0;
+}
 
 function loadLogs() {
   try {
@@ -434,6 +526,9 @@ function resetGame() {
   game.bestPerfectCombo = 0;
   game.comboMessage = "";
   game.comboEffectAge = 0;
+  game.liveToast = "";
+  game.liveToastAge = 0;
+  game.recordCelebrated = false;
 
   gameStatus.textContent = "準備好了，點一下就飛。";
   updateLiveMetrics(0);
@@ -453,6 +548,7 @@ function startGame() {
   game.playerPlayCount = playerCounts[game.playerName] || 1;
   game.dailyChallengeActive = game.dailyChallengeActive;
   game.running = true;
+  ensureAudioContext();
   game.startTime = performance.now();
   game.lastFrameTime = game.startTime;
   gameStatus.textContent = "遊戲中，點一下往上飛。";
@@ -480,6 +576,7 @@ function flap() {
     return;
   }
   pendingClick = true;
+  playSound("flap");
 }
 
 function update(now) {
@@ -593,6 +690,15 @@ function updateScore() {
       } else {
         game.perfectCombo = 0;
       }
+      playSound(isPerfect ? "perfect" : "pass");
+      vibrate(isPerfect ? [18, 24, 22] : 16);
+      const profile = getPlayerProfile(game.playerName);
+      if (!game.recordCelebrated && game.score > profile.bestScore) {
+        game.recordCelebrated = true;
+        showLiveToast(`新紀錄！${game.score} 分`);
+      } else if (SCORE_MILESTONES.includes(game.score)) {
+        showLiveToast(`抵達 ${game.score} 分里程碑！`);
+      }
       passEffects.push({
         x: BIRD_X + 38,
         y: game.birdY,
@@ -643,13 +749,20 @@ function checkAchievements() {
 }
 
 function addAchievement(name) {
+  const profile = getPlayerProfile(game.playerName);
+  const isNewForPlayer = game.playerName && !profile.achievements.includes(name);
   if (!game.achievements.includes(name)) {
     game.achievements.push(name);
   }
-  const profile = getPlayerProfile(game.playerName);
   if (game.playerName && !profile.achievements.includes(name)) {
     profile.achievements.push(name);
     savePlayerProfiles();
+  }
+  if (game.running && isNewForPlayer) {
+    const achievement = ACHIEVEMENTS.find((item) => item.name === name);
+    showLiveToast(`新成就：${achievement?.title || name}`);
+    playSound("achievement");
+    vibrate([22, 30, 22]);
   }
 }
 
@@ -767,6 +880,8 @@ function endGame(elapsedSeconds) {
   game.running = false;
   game.over = true;
   game.deathAnimationStarted = performance.now();
+  playSound("gameOver");
+  vibrate([45, 50, 80]);
   window.cancelAnimationFrame(animationId);
   animationId = null;
   ensureDeathFrameLogged(elapsedSeconds);
@@ -1683,6 +1798,11 @@ function drawHud() {
   const allBest = getAllUsersBestScore();
   const myBest = game.playerName ? Math.max(profile.bestScore, game.score) : 0;
   const rankName = getRankName(myBest);
+  const finalMilestone = SCORE_MILESTONES[SCORE_MILESTONES.length - 1];
+  const nextMilestone = SCORE_MILESTONES.find((score) => score > game.score) || finalMilestone;
+  const previousMilestone = [...SCORE_MILESTONES].reverse().find((score) => score <= game.score) || 0;
+  const milestoneSpan = Math.max(1, nextMilestone - previousMilestone);
+  const milestoneProgress = nextMilestone === previousMilestone ? 1 : (game.score - previousMilestone) / milestoneSpan;
 
   drawRoundedPanel(14, 14, 222, 126, 8, "rgba(255, 255, 255, 0.58)", "rgba(17, 24, 39, 0.16)");
   ctx.fillStyle = "rgba(17, 24, 39, 0.88)";
@@ -1695,6 +1815,15 @@ function drawHud() {
   }
   ctx.fillText(`全體最高：${allBest.score}${allBest.player ? `（${allBest.player}）` : ""}`, 28, 104, 194);
   ctx.fillText(`個人最高：${myBest} | ${rankName}`, 28, 124, 194);
+
+  drawRoundedPanel(248, 14, 218, 64, 8, "rgba(17, 24, 39, 0.66)", "rgba(255, 255, 255, 0.3)");
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.font = "800 13px system-ui";
+  ctx.fillText(game.score >= finalMilestone ? "傳奇里程碑完成" : `下一站：${nextMilestone} 分`, 260, 37);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.24)";
+  ctx.fillRect(260, 48, 190, 12);
+  ctx.fillStyle = "#ffd84d";
+  ctx.fillRect(260, 48, 190 * Math.max(0, Math.min(1, milestoneProgress)), 12);
 
   if (game.dailyChallengeActive) {
     drawRoundedPanel(14, 148, 190, 28, 8, "rgba(232, 247, 239, 0.72)", "rgba(45, 138, 79, 0.2)");
@@ -1716,6 +1845,21 @@ function drawHud() {
     ctx.fillText(game.comboMessage, CANVAS_WIDTH / 2, 170);
     ctx.restore();
     game.comboEffectAge += 1;
+  }
+
+  if (game.liveToast && game.liveToastAge < 110) {
+    const fadeIn = Math.min(1, game.liveToastAge / 10);
+    const fadeOut = Math.min(1, (110 - game.liveToastAge) / 18);
+    const lift = Math.min(12, game.liveToastAge * 0.35);
+    ctx.save();
+    ctx.globalAlpha = Math.min(fadeIn, fadeOut);
+    drawRoundedPanel(80, 206 - lift, 320, 48, 12, "rgba(17, 24, 39, 0.88)", "rgba(255, 216, 77, 0.9)");
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.font = "900 18px system-ui";
+    ctx.fillText(game.liveToast, CANVAS_WIDTH / 2, 237 - lift, 292);
+    ctx.restore();
+    game.liveToastAge += 1;
   }
 
   if (!game.running && !game.over) {
@@ -2235,6 +2379,7 @@ restartButton.addEventListener("click", restartGame);
 exportButton.addEventListener("click", exportCsv);
 clearButton.addEventListener("click", clearData);
 dailyChallengeButton.addEventListener("click", enableDailyChallenge);
+soundButton.addEventListener("click", toggleSound);
 playerNameInput.addEventListener("input", updatePlayerCountDisplay);
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
@@ -2265,6 +2410,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 playerNameInput.value = "";
+updateSoundButton();
 setUploadStatus("待機，結束後自動上傳完整一局。");
 updatePlayerCountDisplay();
 resetGame();

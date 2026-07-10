@@ -175,6 +175,25 @@ h2 {
   font-size: 0.86rem;
 }
 
+.sound-toggle {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 2px solid #17202a;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #17202a;
+  font-size: 0.86rem;
+}
+
+.sound-toggle:hover {
+  background: #fff8dc;
+}
+
+.sound-toggle[aria-pressed="false"] {
+  border-color: #9aa8b5;
+  color: #607487;
+}
+
 .control-row {
   display: grid;
   grid-template-columns: 1.2fr 1.2fr 1fr 1fr;
